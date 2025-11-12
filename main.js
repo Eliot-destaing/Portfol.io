@@ -5,7 +5,6 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { VignetteShader } from 'three/examples/jsm/shaders/VignetteShader.js';
-import { Text } from 'troika-three-text';
 import gsap from './libs/gsap.min.js';
 
 const loadingOverlay = document.getElementById('loading');
@@ -168,6 +167,27 @@ manager.onProgress = (url, loaded, total) => {
 const projectAnchors = [];
 const projectTargets = [];
 
+const tempBox = new THREE.Box3();
+const tempSize = new THREE.Vector3();
+const tempCenter = new THREE.Vector3();
+
+function normalizeModel(object, targetSize = 1.6) {
+  tempBox.setFromObject(object);
+  if (tempBox.isEmpty()) {
+    return object.scale.x || 1;
+  }
+  tempBox.getSize(tempSize);
+  const maxAxis = Math.max(tempSize.x, tempSize.y, tempSize.z);
+  const scale = maxAxis > 0 ? targetSize / maxAxis : 1;
+  object.scale.multiplyScalar(scale);
+  object.updateMatrixWorld(true);
+  tempBox.setFromObject(object);
+  tempBox.getCenter(tempCenter);
+  object.position.sub(tempCenter);
+  object.updateMatrixWorld(true);
+  return object.scale.x;
+}
+
 function fibonacciSphere(index, total, radius) {
   const i = index + 0.5;
   const phi = Math.acos(1 - 2 * i / total);
@@ -224,6 +244,80 @@ function createPopupPanelMaterial() {
   });
 }
 
+function createTextLabel({
+  text,
+  fontSize = 72,
+  lineHeight = 1.25,
+  color = '#ffffff',
+  align = 'left',
+  fontFamily = '"Segoe UI", "Montserrat", sans-serif',
+  paddingX = 70,
+  paddingY = 50,
+  canvasWidth = 1400,
+  targetWidth = 1.55,
+}) {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvasWidth;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = color;
+  ctx.font = `${fontSize}px ${fontFamily}`;
+  ctx.textAlign = align;
+  ctx.textBaseline = 'top';
+
+  const words = text.split(' ');
+  const lines = [];
+  const maxLineWidth = canvasWidth - paddingX * 2;
+  let currentLine = '';
+  words.forEach(word => {
+    const tentative = currentLine ? `${currentLine} ${word}` : word;
+    const metrics = ctx.measureText(tentative);
+    if (metrics.width > maxLineWidth && currentLine.length) {
+      lines.push(currentLine);
+      currentLine = word;
+    } else {
+      currentLine = tentative;
+    }
+  });
+  if (currentLine.length) {
+    lines.push(currentLine);
+  }
+
+  const lineHeightPx = fontSize * lineHeight;
+  const totalHeight = Math.ceil(lines.length * lineHeightPx + paddingY * 2);
+  canvas.height = totalHeight;
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = color;
+  ctx.font = `${fontSize}px ${fontFamily}`;
+  ctx.textAlign = align;
+  ctx.textBaseline = 'top';
+  const drawX =
+    align === 'center' ? canvas.width / 2 : align === 'right' ? canvas.width - paddingX : paddingX;
+  lines.forEach((line, index) => {
+    ctx.fillText(line, drawX, paddingY + index * lineHeightPx);
+  });
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.minFilter = THREE.LinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  texture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy?.() || 8);
+
+  const aspect = canvas.height / canvas.width;
+  const height = targetWidth * aspect;
+  const geometry = new THREE.PlaneGeometry(targetWidth, height);
+  const material = new THREE.MeshBasicMaterial({
+    map: texture,
+    transparent: true,
+    depthWrite: false,
+    opacity: 0,
+  });
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.renderOrder = 11;
+
+  return { mesh, material, width: targetWidth, height };
+}
+
 function createPopup(project) {
   const popupGroup = new THREE.Group();
   popupGroup.name = `popup-${project.id}`;
@@ -234,53 +328,73 @@ function createPopup(project) {
   panel.layers.enable(1);
   popupGroup.add(panel);
 
-  const title = new Text();
-  title.text = project.name;
-  title.fontSize = 0.22;
-  title.anchorX = 'left';
-  title.anchorY = 'top';
-  title.maxWidth = 1.5;
-  title.position.set(-0.86, 0.42, 0.02);
-  title.color = '#f1f4ff';
-  title.letterSpacing = 0.01;
-  title.material.transparent = true;
-  title.material.depthWrite = false;
-  title.layers.enable(1);
-  title.frustumCulled = false;
-  popupGroup.add(title);
+  const panelWidth = 1.9;
+  const halfPanelWidth = panelWidth / 2;
+  const panelHeight = 1.1;
+  const topMargin = 0.18;
+  const leftMargin = 0.18;
+  const contentZ = 0.02;
 
-  let subtitle = null;
+  let cursorY = panelHeight / 2 - topMargin;
+  const textMaterials = [];
+
+  const titleLabel = createTextLabel({
+    text: project.name,
+    fontSize: 86,
+    lineHeight: 1.08,
+    color: '#f3f6ff',
+    canvasWidth: 1500,
+    paddingX: 90,
+    paddingY: 60,
+    targetWidth: 1.52,
+  });
+  titleLabel.mesh.position.set(
+    -halfPanelWidth + leftMargin + titleLabel.width / 2,
+    cursorY - titleLabel.height / 2,
+    contentZ
+  );
+  popupGroup.add(titleLabel.mesh);
+  textMaterials.push(titleLabel.material);
+  cursorY -= titleLabel.height + 0.07;
+
   if (project.subtitle) {
-    subtitle = new Text();
-    subtitle.text = project.subtitle;
-    subtitle.fontSize = 0.115;
-    subtitle.anchorX = 'left';
-    subtitle.anchorY = 'top';
-    subtitle.maxWidth = 1.5;
-    subtitle.position.set(-0.86, 0.22, 0.02);
-    subtitle.color = '#9ad7ff';
-    subtitle.letterSpacing = 0.005;
-    subtitle.material.transparent = true;
-    subtitle.material.depthWrite = false;
-    subtitle.layers.enable(1);
-    subtitle.frustumCulled = false;
-    popupGroup.add(subtitle);
+    const subtitleLabel = createTextLabel({
+      text: project.subtitle,
+      fontSize: 52,
+      lineHeight: 1.1,
+      color: '#9fd0ff',
+      canvasWidth: 1300,
+      paddingX: 90,
+      paddingY: 40,
+      targetWidth: 1.45,
+    });
+    subtitleLabel.mesh.position.set(
+      -halfPanelWidth + leftMargin + subtitleLabel.width / 2,
+      cursorY - subtitleLabel.height / 2,
+      contentZ
+    );
+    popupGroup.add(subtitleLabel.mesh);
+    textMaterials.push(subtitleLabel.material);
+    cursorY -= subtitleLabel.height + 0.08;
   }
 
-  const body = new Text();
-  body.text = project.description;
-  body.fontSize = 0.1;
-  body.anchorX = 'left';
-  body.anchorY = 'top';
-  body.maxWidth = 1.5;
-  body.lineHeight = 1.4;
-  body.position.set(-0.86, subtitle ? 0.02 : 0.18, 0.02);
-  body.color = '#c7d7ff';
-  body.material.transparent = true;
-  body.material.depthWrite = false;
-  body.layers.enable(1);
-  body.frustumCulled = false;
-  popupGroup.add(body);
+  const bodyLabel = createTextLabel({
+    text: project.description,
+    fontSize: 48,
+    lineHeight: 1.45,
+    color: '#c6d6ff',
+    canvasWidth: 1500,
+    paddingX: 90,
+    paddingY: 50,
+    targetWidth: 1.52,
+  });
+  bodyLabel.mesh.position.set(
+    -halfPanelWidth + leftMargin + bodyLabel.width / 2,
+    cursorY - bodyLabel.height / 2,
+    contentZ
+  );
+  popupGroup.add(bodyLabel.mesh);
+  textMaterials.push(bodyLabel.material);
 
   const buttonBackground = new THREE.Mesh(
     new THREE.PlaneGeometry(0.85, 0.24),
@@ -308,18 +422,20 @@ function createPopup(project) {
   buttonOutline.layers.enable(1);
   popupGroup.add(buttonOutline);
 
-  const buttonLabel = new Text();
-  buttonLabel.text = 'Voir sur GitHub';
-  buttonLabel.fontSize = 0.12;
-  buttonLabel.anchorX = 'center';
-  buttonLabel.anchorY = 'middle';
-  buttonLabel.position.set(0.0, -0.45, 0.02);
-  buttonLabel.color = '#e2f2ff';
-  buttonLabel.material.transparent = true;
-  buttonLabel.material.depthWrite = false;
-  buttonLabel.layers.enable(1);
-  buttonLabel.frustumCulled = false;
-  popupGroup.add(buttonLabel);
+  const buttonLabel = createTextLabel({
+    text: 'Voir sur GitHub',
+    fontSize: 56,
+    lineHeight: 1.0,
+    color: '#e7f4ff',
+    canvasWidth: 1024,
+    paddingX: 40,
+    paddingY: 36,
+    targetWidth: 0.7,
+    align: 'center',
+  });
+  buttonLabel.mesh.position.set(0.0, -0.45, 0.02);
+  popupGroup.add(buttonLabel.mesh);
+  textMaterials.push(buttonLabel.material);
 
   const buttonMesh = new THREE.Mesh(
     new THREE.PlaneGeometry(0.85, 0.24),
@@ -329,16 +445,6 @@ function createPopup(project) {
   buttonMesh.userData.openLink = project.link;
   popupGroup.add(buttonMesh);
 
-  [title, subtitle, body, buttonLabel].forEach(textMesh => {
-    if (textMesh) {
-      textMesh.material.opacity = 0.0;
-      textMesh.addEventListener('synccomplete', () => {
-        textMesh.material.depthWrite = false;
-      });
-      textMesh.sync();
-    }
-  });
-
   buttonBackground.material.opacity = 0.0;
   buttonOutline.material.opacity = 0.0;
 
@@ -347,9 +453,8 @@ function createPopup(project) {
     project,
     panelUniforms: panelMaterial.uniforms,
     buttonBackground,
-    buttonLabel,
     buttonOutline,
-    textMeshes: [title, subtitle, body, buttonLabel].filter(Boolean),
+    textMaterials,
     tweens: [],
   };
 
@@ -403,8 +508,8 @@ async function loadProjects() {
         meshes.push(node);
       }
     });
-    const baseScale = 0.9;
-    asset.scale.setScalar(baseScale);
+    const targetVisualSize = 1.8;
+    normalizeModel(asset, targetVisualSize);
     anchor.add(asset);
 
     const radius = 4.2;
@@ -415,7 +520,7 @@ async function loadProjects() {
     anchor.userData = {
       project,
       asset,
-      baseScale,
+      baseScale: asset.scale.x,
       focusTween: null,
       highlight: false,
       floatOffset: Math.random() * Math.PI * 2,
@@ -505,13 +610,13 @@ function openPopup(project) {
   clearPopupTweens(popup);
 
   popup.scale.setScalar(1);
-  const { panelUniforms, buttonBackground, buttonOutline, textMeshes } = popup.userData;
+  const { panelUniforms, buttonBackground, buttonOutline, textMaterials } = popup.userData;
   panelUniforms.uAlpha.value = 0;
   panelUniforms.uGlow.value = 0;
   buttonBackground.material.opacity = 0.0;
   buttonOutline.material.opacity = 0.0;
-  textMeshes.forEach(mesh => {
-    mesh.material.opacity = 0.0;
+  textMaterials.forEach(material => {
+    material.opacity = 0.0;
   });
 
   const scaleTween = gsap.fromTo(
@@ -545,15 +650,12 @@ function openPopup(project) {
     yoyo: true,
     repeat: -1,
   });
-  const textFade = gsap.to(
-    textMeshes.map(mesh => mesh.material),
-    {
-      opacity: 1,
-      duration: 0.6,
-      ease: 'sine.out',
-      stagger: 0.08,
-    }
-  );
+  const textFade = gsap.to(textMaterials, {
+    opacity: 1,
+    duration: 0.6,
+    ease: 'sine.out',
+    stagger: 0.08,
+  });
 
   popup.userData.tweens.push(scaleTween, panelFade, glowLoop, buttonPulse, outlinePulse, textFade);
 }
@@ -564,7 +666,7 @@ function closePopup() {
   activePopup = null;
   clearPopupTweens(popup);
 
-  const { panelUniforms, buttonBackground, buttonOutline, textMeshes } = popup.userData;
+  const { panelUniforms, buttonBackground, buttonOutline, textMaterials } = popup.userData;
 
   const fadeOutPanel = gsap.to(panelUniforms.uAlpha, {
     value: 0,
@@ -574,14 +676,11 @@ function closePopup() {
       panelUniforms.uGlow.value = 0;
     },
   });
-  const fadeTexts = gsap.to(
-    textMeshes.map(mesh => mesh.material),
-    {
-      opacity: 0,
-      duration: 0.25,
-      ease: 'expo.in',
-    }
-  );
+  const fadeTexts = gsap.to(textMaterials, {
+    opacity: 0,
+    duration: 0.25,
+    ease: 'expo.in',
+  });
   const fadeButton = gsap.to(buttonBackground.material, {
     opacity: 0,
     duration: 0.3,
@@ -601,8 +700,8 @@ function closePopup() {
     onComplete: () => {
       popup.visible = false;
       popup.scale.setScalar(1);
-      popup.userData.textMeshes.forEach(mesh => {
-        mesh.material.opacity = 0.0;
+      textMaterials.forEach(material => {
+        material.opacity = 0.0;
       });
     },
   });
