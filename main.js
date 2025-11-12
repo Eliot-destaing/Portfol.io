@@ -67,9 +67,9 @@ scene.add(sideLight2);
 
 const nebulaUniforms = {
   uTime: { value: 0 },
-  uColorInner: { value: new THREE.Color(0x1d0b33) },
-  uColorOuter: { value: new THREE.Color(0x03010f) },
-  uAccent: { value: new THREE.Color(0x5430a8) },
+  uColorInner: { value: new THREE.Color(0x3d2b53) }, // Plus lumineux
+  uColorOuter: { value: new THREE.Color(0x1a0b2f) }, // Plus lumineux
+  uAccent: { value: new THREE.Color(0x7450c8) }, // Plus lumineux
 };
 const nebulaMaterial = new THREE.ShaderMaterial({
   side: THREE.BackSide,
@@ -146,16 +146,70 @@ const debrisMaterial = new THREE.MeshStandardMaterial({
   roughness: 0.8,
   emissive: new THREE.Color(0x111424),
 });
-for (let i = 0; i < 45; i++) {
-  const geometry = new THREE.TetrahedronGeometry(THREE.MathUtils.randFloat(0.1, 0.3), 1);
+// Débris de plusieurs tailles
+const debrisSizes = [0.05, 0.1, 0.15, 0.2, 0.3, 0.4, 0.5, 0.7];
+for (let i = 0; i < 120; i++) {
+  const size = debrisSizes[Math.floor(Math.random() * debrisSizes.length)];
+  const geometry = new THREE.TetrahedronGeometry(size, 1);
   const mesh = new THREE.Mesh(geometry, debrisMaterial.clone());
-  const pos = new THREE.Vector3().randomDirection().multiplyScalar(THREE.MathUtils.randFloat(2.2, 7.0));
+  const pos = new THREE.Vector3().randomDirection().multiplyScalar(THREE.MathUtils.randFloat(2.2, 10.0));
   mesh.position.copy(pos);
   mesh.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
   mesh.material.emissiveIntensity = THREE.MathUtils.randFloat(0.1, 0.5);
   mesh.userData.spin = new THREE.Vector3().set(Math.random(), Math.random(), Math.random()).multiplyScalar(THREE.MathUtils.randFloat(0.1, 0.4));
   debrisGroup.add(mesh);
 }
+
+// Planètes au loin
+const planetsGroup = new THREE.Group();
+scene.add(planetsGroup);
+const planetData = [
+  { radius: 0.8, distance: 15, color: 0x8b6f47, speed: 0.1 }, // Planète brune
+  { radius: 1.2, distance: 18, color: 0x4a5d7a, speed: 0.08 }, // Planète bleue
+  { radius: 0.6, distance: 20, color: 0x7a5a4a, speed: 0.12 }, // Planète orange
+  { radius: 1.0, distance: 22, color: 0x5a4a6a, speed: 0.09 }, // Planète violette
+];
+planetData.forEach((data, i) => {
+  const geometry = new THREE.SphereGeometry(data.radius, 32, 32);
+  const material = new THREE.MeshStandardMaterial({
+    color: data.color,
+    emissive: data.color,
+    emissiveIntensity: 0.2,
+    metalness: 0.1,
+    roughness: 0.9,
+  });
+  const planet = new THREE.Mesh(geometry, material);
+  const angle = (i / planetData.length) * Math.PI * 2;
+  planet.position.set(
+    Math.cos(angle) * data.distance,
+    Math.sin(angle * 0.5) * 3,
+    Math.sin(angle) * data.distance
+  );
+  planet.userData.initialAngle = angle;
+  planet.userData.speed = data.speed;
+  planet.userData.distance = data.distance;
+  planetsGroup.add(planet);
+});
+
+// Soleil avec lumière
+const sunGeometry = new THREE.SphereGeometry(2.5, 32, 32);
+const sunMaterial = new THREE.MeshBasicMaterial({
+  color: 0xffd700,
+  emissive: 0xffaa00,
+  emissiveIntensity: 1.5,
+});
+const sun = new THREE.Mesh(sunGeometry, sunMaterial);
+sun.position.set(12, 8, -15);
+scene.add(sun);
+
+// Lumière du soleil
+const sunLight = new THREE.PointLight(0xffd700, 2.0, 50);
+sunLight.position.copy(sun.position);
+scene.add(sunLight);
+
+// Lumière ambiante supplémentaire du soleil
+const sunAmbient = new THREE.AmbientLight(0xffd700, 0.3);
+scene.add(sunAmbient);
 
 const goldenRatio = (1 + Math.sqrt(5)) / 2;
 const projectsData = [
@@ -167,6 +221,10 @@ const projectsData = [
     description:
       'Journal visuel de mission universitaire en Bolivie — immersion terrain, reportage photographique et narration sensible des communautés andines.',
     link: 'https://github.com/example/semestre-bolivie',
+    // Paramètres personnalisés par objet
+    distance: 4.2,      // Distance depuis le centre
+    taille: 1.0,        // Taille de l'objet
+    lumiereMax: 1.0,    // Multiplicateur de luminosité (1.0 = normal)
   },
   {
     id: 'retro_game_unity',
@@ -176,6 +234,9 @@ const projectsData = [
     description:
       'Jeu Unity inspiré des consoles 90s avec shaders CRT, scoring arcade et animations low-poly.',
     link: 'https://github.com/example/retro-game-unity',
+    distance: 4.2,
+    taille: 1.0,
+    lumiereMax: 1.0,
   },
   {
     id: 'stage_ministere',
@@ -185,6 +246,9 @@ const projectsData = [
     description:
       'Stage de 18 semaines au ministère des armées — développement d\'applications et systèmes pour la défense.',
     link: null, // Pas de GitHub
+    distance: 4.2,
+    taille: 1.0,
+    lumiereMax: 0.5,    // Casque moins lumineux
   },
   {
     id: 'projet_ero',
@@ -194,6 +258,9 @@ const projectsData = [
     description:
       'Optimisation de parcours de graphes pour la gestion de la déneigement dans la ville de Montréal — développement en Python.',
     link: 'https://github.com/example/projet-ero',
+    distance: 4.2,
+    taille: 1.5,        // Déneigeuse plus grande
+    lumiereMax: 1.0,
   },
 ];
 
@@ -331,14 +398,33 @@ async function loadProjects() {
     const asset = gltf.scene;
     const meshes = [];
     
-    // Charger simplement le modèle sans modifier les matériaux
+    // Charger le modèle et ajuster les matériaux selon les paramètres personnalisés
     asset.traverse(node => {
       if (node.isMesh) {
         meshes.push(node);
+        // Ajuster la luminosité selon le paramètre lumiereMax
+        if (node.material) {
+          const originalMat = node.material;
+          const lumiereMax = project.lumiereMax !== undefined ? project.lumiereMax : 1.0;
+          
+          // Si c'est un MeshStandardMaterial ou similaire, ajuster l'émissivité
+          if (originalMat.isMeshStandardMaterial || originalMat.isMeshPhysicalMaterial) {
+            if (!originalMat.emissive) {
+              originalMat.emissive = new THREE.Color(0x000000);
+            }
+            // Réduire la luminosité en ajustant l'émissivité et la couleur
+            originalMat.emissiveIntensity = lumiereMax * 0.3;
+            originalMat.color.multiplyScalar(lumiereMax);
+          } else if (originalMat.isMeshBasicMaterial) {
+            // Pour MeshBasicMaterial, ajuster la couleur directement
+            originalMat.color.multiplyScalar(lumiereMax);
+          }
+        }
       }
     });
     
-    const targetVisualSize = 1.0; // Objets plus petits
+    // Utiliser la taille personnalisée
+    const targetVisualSize = project.taille !== undefined ? project.taille : 1.0;
     normalizeModel(asset, targetVisualSize);
     anchor.add(asset);
 
@@ -346,7 +432,8 @@ async function loadProjects() {
     if (projectsData.length === 1) {
       pos = new THREE.Vector3(0, 0, -4.5);
     } else {
-      const radius = 4.2;
+      // Utiliser la distance personnalisée
+      const radius = project.distance !== undefined ? project.distance : 4.2;
       pos = fibonacciSphere(index, projectsData.length, radius);
     }
     anchor.position.copy(pos);
@@ -622,6 +709,21 @@ function animate() {
     mesh.rotation.y += mesh.userData.spin.y * delta;
     mesh.rotation.z += mesh.userData.spin.z * delta;
   });
+
+  // Animation des planètes
+  planetsGroup.children.forEach(planet => {
+    const t = clock.elapsedTime;
+    const angle = planet.userData.initialAngle + t * planet.userData.speed;
+    planet.position.set(
+      Math.cos(angle) * planet.userData.distance,
+      Math.sin(angle * 0.5) * 3,
+      Math.sin(angle) * planet.userData.distance
+    );
+    planet.rotation.y += delta * 0.2;
+  });
+
+  // Animation du soleil (rotation lente)
+  sun.rotation.y += delta * 0.1;
 
   projectAnchors.forEach(anchor => {
     const asset = anchor.userData.asset;
