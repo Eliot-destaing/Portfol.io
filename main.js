@@ -18,7 +18,7 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.fog = new THREE.FogExp2(0x0a0416, 0.08); // Brouillard pour l'ambiance spatiale
+scene.fog = new THREE.FogExp2(0x0a0416, 0.05); // Brouillard réduit pour mieux voir les objets
 
 const cameraHolder = new THREE.Object3D();
 scene.add(cameraHolder);
@@ -41,17 +41,20 @@ vignettePass.uniforms['darkness'].value = 1.25;
 composer.addPass(vignettePass);
 
 // Éclairage amélioré pour l'ambiance spatiale
-const ambient = new THREE.AmbientLight(0x4a3a7a, 0.5);
+const ambient = new THREE.AmbientLight(0xffffff, 0.6); // Lumière blanche plus forte
 scene.add(ambient);
-const keyLight = new THREE.DirectionalLight(0x8a7ab8, 0.8);
+const keyLight = new THREE.DirectionalLight(0xffffff, 1.0); // Lumière principale blanche
 keyLight.position.set(5, 5, 5);
 scene.add(keyLight);
-const fillLight = new THREE.DirectionalLight(0x5a4a8a, 0.4);
+const fillLight = new THREE.DirectionalLight(0xffffff, 0.6); // Lumière de remplissage
 fillLight.position.set(-5, 3, -5);
 scene.add(fillLight);
-const rimLight = new THREE.DirectionalLight(0x6a5a9a, 0.5);
+const rimLight = new THREE.DirectionalLight(0x8a7ab8, 0.4); // Lumière d'ambiance violette
 rimLight.position.set(0, -5, -5);
 scene.add(rimLight);
+const accentLight = new THREE.DirectionalLight(0x6a5a9a, 0.3); // Accent coloré
+accentLight.position.set(0, 5, 0);
+scene.add(accentLight);
 
 const nebulaUniforms = {
   uTime: { value: 0 },
