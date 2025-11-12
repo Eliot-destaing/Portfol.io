@@ -208,6 +208,7 @@ function createHTMLPopup(project) {
   
   popup.innerHTML = `
     <div class="popup-glass">
+      <button class="popup-close" aria-label="Fermer">×</button>
       <div class="popup-content">
         <h2 class="popup-title">${project.name}</h2>
         ${project.subtitle ? `<h3 class="popup-subtitle">${project.subtitle}</h3>` : ''}
@@ -220,6 +221,12 @@ function createHTMLPopup(project) {
   `;
   
   document.body.appendChild(popup);
+  
+  const closeButton = popup.querySelector('.popup-close');
+  closeButton.addEventListener('click', (e) => {
+    e.stopPropagation();
+    closePopup();
+  });
   
   const button = popup.querySelector('.popup-button');
   button.addEventListener('click', (e) => {
@@ -264,20 +271,36 @@ async function loadProjects() {
     const meshes = [];
     asset.traverse(node => {
       if (node.isMesh) {
-        // Utiliser directement les matériaux originaux du GLTF sans modification
+        // Préserver complètement les matériaux originaux du GLTF
         if (node.material) {
           const originalMaterial = node.material;
-          // Si c'est un tableau de matériaux, utiliser tous les matériaux
+          
           if (Array.isArray(originalMaterial)) {
+            // Pour les tableaux de matériaux, préserver chaque matériau
             node.material = originalMaterial.map(mat => {
-              // Ne pas cloner, utiliser directement pour préserver toutes les propriétés
-              if (mat.map) mat.map.needsUpdate = true;
+              // Configurer toutes les textures possibles
+              const textureMaps = ['map', 'normalMap', 'emissiveMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'alphaMap', 'bumpMap', 'displacementMap'];
+              textureMaps.forEach(mapName => {
+                if (mat[mapName]) {
+                  mat[mapName].colorSpace = THREE.SRGBColorSpace;
+                  mat[mapName].needsUpdate = true;
+                }
+              });
+              // Préserver toutes les propriétés du matériau
               mat.needsUpdate = true;
               return mat;
             });
           } else {
-            // Utiliser le matériau directement sans cloner
-            if (originalMaterial.map) originalMaterial.map.needsUpdate = true;
+            // Pour un seul matériau, préserver toutes ses propriétés
+            // Configurer toutes les textures possibles
+            const textureMaps = ['map', 'normalMap', 'emissiveMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'alphaMap', 'bumpMap', 'displacementMap'];
+            textureMaps.forEach(mapName => {
+              if (originalMaterial[mapName]) {
+                originalMaterial[mapName].colorSpace = THREE.SRGBColorSpace;
+                originalMaterial[mapName].needsUpdate = true;
+              }
+            });
+            // Préserver toutes les propriétés du matériau (couleur, metalness, roughness, etc.)
             originalMaterial.needsUpdate = true;
             node.material = originalMaterial;
           }
@@ -390,6 +413,7 @@ function openPopup(project) {
   popup.style.opacity = '0';
   
   const glass = popup.querySelector('.popup-glass');
+  const closeBtn = popup.querySelector('.popup-close');
   const title = popup.querySelector('.popup-title');
   const subtitle = popup.querySelector('.popup-subtitle');
   const description = popup.querySelector('.popup-description');
@@ -403,6 +427,13 @@ function openPopup(project) {
     { opacity: 0, scale: 0.9 },
     { opacity: 1, scale: 1, duration: 0.5, ease: 'expo.out' }
   );
+  
+  if (closeBtn) {
+    gsap.fromTo(closeBtn,
+      { opacity: 0, scale: 0.8, rotation: -90 },
+      { opacity: 1, scale: 1, rotation: 0, duration: 0.4, ease: 'expo.out', delay: 0.2 }
+    );
+  }
   
   if (title) {
     gsap.fromTo(title,
