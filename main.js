@@ -11,13 +11,13 @@ const loadingOverlay = document.getElementById('loading');
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.1;
+renderer.toneMappingExposure = 1.5; // Exposition augmentée pour mieux voir les couleurs
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.fog = new THREE.FogExp2(0x0a0416, 0.045);
+scene.fog = new THREE.FogExp2(0x0a0416, 0.02); // Brouillard réduit pour mieux voir les objets
 
 const cameraHolder = new THREE.Object3D();
 scene.add(cameraHolder);
@@ -38,17 +38,18 @@ vignettePass.uniforms['offset'].value = 1.05;
 vignettePass.uniforms['darkness'].value = 1.25;
 composer.addPass(vignettePass);
 
-const ambient = new THREE.AmbientLight(0x6c7ba5, 0.6);
+// Éclairage amélioré pour mieux voir les couleurs des objets
+const ambient = new THREE.AmbientLight(0xffffff, 1.2);
 scene.add(ambient);
-const keyLight = new THREE.PointLight(0x86a2ff, 1.45, 28, 1.6);
-keyLight.position.set(4, 3, 3);
+const keyLight = new THREE.DirectionalLight(0xffffff, 1.5);
+keyLight.position.set(5, 5, 5);
 scene.add(keyLight);
-const rimLight = new THREE.PointLight(0xff9fd5, 0.9, 25, 2.0);
-rimLight.position.set(-3, -4, -2);
-scene.add(rimLight);
-const fillLight = new THREE.PointLight(0x94b8ff, 0.8, 30, 1.4);
-fillLight.position.set(0, 2, -4.5);
+const fillLight = new THREE.DirectionalLight(0xffffff, 0.8);
+fillLight.position.set(-5, 3, -5);
 scene.add(fillLight);
+const backLight = new THREE.DirectionalLight(0xffffff, 0.6);
+backLight.position.set(0, 0, 5);
+scene.add(backLight);
 
 const nebulaUniforms = {
   uTime: { value: 0 },
@@ -147,11 +148,20 @@ const projectsData = [
   {
     id: 'semestre_bolivie',
     name: 'Semestre Bolivie',
-    subtitle: 'Carnet d’exploration à La Paz & Uyuni',
+    subtitle: 'Carnet d\'exploration à La Paz & Uyuni',
     file: 'assets/models/semestre_bolivie.gltf',
     description:
       'Journal visuel de mission universitaire en Bolivie — immersion terrain, reportage photographique et narration sensible des communautés andines.',
     link: 'https://github.com/example/semestre-bolivie',
+  },
+  {
+    id: 'retro_game_unity',
+    name: 'Retro Game Unity',
+    subtitle: 'Jeu Unity style années 90',
+    file: 'assets/models/retro_game_unity.gltf',
+    description:
+      'Jeu Unity inspiré des consoles 90s avec shaders CRT, scoring arcade et animations low-poly.',
+    link: 'https://github.com/example/retro-game-unity',
   },
 ];
 
@@ -269,42 +279,11 @@ async function loadProjects() {
     anchor.name = project.name;
     const asset = gltf.scene;
     const meshes = [];
+    // NE PAS TOUCHER AUX MATÉRIAUX - utiliser directement ce qui vient du GLTF
     asset.traverse(node => {
       if (node.isMesh) {
-        // Préserver complètement les matériaux originaux du GLTF
-        if (node.material) {
-          const originalMaterial = node.material;
-          
-          if (Array.isArray(originalMaterial)) {
-            // Pour les tableaux de matériaux, préserver chaque matériau
-            node.material = originalMaterial.map(mat => {
-              // Configurer toutes les textures possibles
-              const textureMaps = ['map', 'normalMap', 'emissiveMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'alphaMap', 'bumpMap', 'displacementMap'];
-              textureMaps.forEach(mapName => {
-                if (mat[mapName]) {
-                  mat[mapName].colorSpace = THREE.SRGBColorSpace;
-                  mat[mapName].needsUpdate = true;
-                }
-              });
-              // Préserver toutes les propriétés du matériau
-              mat.needsUpdate = true;
-              return mat;
-            });
-          } else {
-            // Pour un seul matériau, préserver toutes ses propriétés
-            // Configurer toutes les textures possibles
-            const textureMaps = ['map', 'normalMap', 'emissiveMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'alphaMap', 'bumpMap', 'displacementMap'];
-            textureMaps.forEach(mapName => {
-              if (originalMaterial[mapName]) {
-                originalMaterial[mapName].colorSpace = THREE.SRGBColorSpace;
-                originalMaterial[mapName].needsUpdate = true;
-              }
-            });
-            // Préserver toutes les propriétés du matériau (couleur, metalness, roughness, etc.)
-            originalMaterial.needsUpdate = true;
-            node.material = originalMaterial;
-          }
-        }
+        // Ne rien modifier, utiliser les matériaux tels quels
+        // Le GLTFLoader gère déjà correctement les textures et couleurs
         meshes.push(node);
       }
     });
