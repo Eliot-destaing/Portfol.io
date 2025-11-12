@@ -26,18 +26,57 @@ const pivot = new THREE.Object3D();
 cameraHolder.add(pivot);
 const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 60);
 pivot.add(camera);
-const composer = new EffectComposer(renderer);
-const renderPass = new RenderPass(scene, camera);
-composer.addPass(renderPass);
-const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.8, 0.6, 0.85);
-bloomPass.threshold = 0.2;
-bloomPass.strength = 0.9;
-bloomPass.radius = 0.5;
-composer.addPass(bloomPass);
+const ENTIRE_SCENE = 0;
+const BLOOM_SCENE = 1;
+const bloomLayer = new THREE.Layers();
+bloomLayer.set(BLOOM_SCENE);
+
+const bloomComposer = new EffectComposer(renderer);
+bloomComposer.renderToScreen = false;
+const bloomRenderPass = new RenderPass(scene, camera);
+bloomComposer.addPass(bloomRenderPass);
+const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.65, 0.6, 0.85);
+bloomPass.threshold = 0.5;
+bloomPass.strength = 0.45;
+bloomPass.radius = 0.35;
+bloomComposer.addPass(bloomPass);
+
+const finalComposer = new EffectComposer(renderer);
+const finalRenderPass = new RenderPass(scene, camera);
+finalComposer.addPass(finalRenderPass);
+
+const bloomBlendPass = new ShaderPass(
+  new THREE.ShaderMaterial({
+    uniforms: {
+      baseTexture: { value: null },
+      bloomTexture: { value: bloomComposer.renderTarget2.texture },
+    },
+    vertexShader: /* glsl */`
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: /* glsl */`
+      uniform sampler2D baseTexture;
+      uniform sampler2D bloomTexture;
+      varying vec2 vUv;
+      void main() {
+        vec4 base = texture2D(baseTexture, vUv);
+        vec4 bloom = texture2D(bloomTexture, vUv);
+        gl_FragColor = base + bloom;
+      }
+    `,
+  }),
+  'baseTexture'
+);
+finalComposer.addPass(bloomBlendPass);
+
 const vignettePass = new ShaderPass(VignetteShader);
 vignettePass.uniforms['offset'].value = 1.05;
 vignettePass.uniforms['darkness'].value = 1.25;
-composer.addPass(vignettePass);
+finalComposer.addPass(vignettePass);
 
 // Éclairage réduit pour voir les formes et couleurs
 const ambient = new THREE.AmbientLight(0xffffff, 0.4);
@@ -177,6 +216,27 @@ manager.onProgress = (url, loaded, total) => {
 const projectAnchors = [];
 const projectTargets = [];
 
+const darkMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
+darkMaterial.colorWrite = false;
+darkMaterial.depthWrite = false;
+const storedMaterials = new Map();
+
+function darkenNonBloomed(obj) {
+  if (obj.isMesh && !bloomLayer.test(obj.layers)) {
+    if (!storedMaterials.has(obj.uuid)) {
+      storedMaterials.set(obj.uuid, obj.material);
+    }
+    obj.material = darkMaterial;
+  }
+}
+
+function restoreMaterial(obj) {
+  if (obj.isMesh && storedMaterials.has(obj.uuid)) {
+    obj.material = storedMaterials.get(obj.uuid);
+    storedMaterials.delete(obj.uuid);
+  }
+}
+
 const tempBox = new THREE.Box3();
 const tempSize = new THREE.Vector3();
 const tempCenter = new THREE.Vector3();
@@ -278,40 +338,39 @@ async function loadProjects() {
     const asset = gltf.scene;
     const meshes = [];
     
-    // Utiliser MeshBasicMaterial pour afficher les couleurs directement sans dépendre de l'éclairage
+    // Restaurer les matériaux PBR d'origine afin de conserver les couleurs et textures du GLTF
+    const convertMaterial = (material) => {
+      if (!material) {
+        return null;
+      }
+
+      const clone = material.clone ? material.clone() : material;
+
+      if (clone.map) {
+        clone.map.colorSpace = THREE.SRGBColorSpace;
+        clone.map.needsUpdate = true;
+      }
+
+      if (clone.emissiveMap) {
+        clone.emissiveMap.colorSpace = THREE.SRGBColorSpace;
+        clone.emissiveMap.needsUpdate = true;
+      }
+
+      clone.needsUpdate = true;
+      return clone;
+    };
+
     asset.traverse(node => {
       if (node.isMesh) {
-        const originalMat = node.material;
-        
-        // Gérer les tableaux de matériaux
-        if (Array.isArray(originalMat)) {
-          node.material = originalMat.map(mat => {
-            return new THREE.MeshBasicMaterial({
-              color: mat?.color?.getHex() || 0x888888,
-              map: mat?.map || null,
-              transparent: mat?.transparent || false,
-              opacity: mat?.opacity || 1.0,
-            });
-          });
-        } else if (originalMat) {
-          // Extraire la couleur et la texture du matériau original
-          const color = originalMat.color ? originalMat.color.getHex() : 0x888888;
-          const map = originalMat.map || null;
-          
-          // Créer un MeshBasicMaterial qui affiche les couleurs directement
-          node.material = new THREE.MeshBasicMaterial({
-            color: color,
-            map: map,
-            transparent: originalMat.transparent || false,
-            opacity: originalMat.opacity || 1.0,
-          });
+        if (Array.isArray(node.material)) {
+          node.material = node.material.map(convertMaterial);
         } else {
-          // Matériau par défaut si aucun matériau
-          node.material = new THREE.MeshBasicMaterial({
-            color: 0x888888,
-          });
+          const converted = convertMaterial(node.material);
+          node.material = converted || new THREE.MeshStandardMaterial({ color: 0x888888 });
         }
-        
+
+        node.layers.enable(ENTIRE_SCENE);
+        node.layers.disable(BLOOM_SCENE);
         meshes.push(node);
       }
     });
@@ -559,9 +618,9 @@ function animate() {
     asset.position.z = Math.cos(clock.elapsedTime * 0.4 + anchor.userData.floatOffset) * 0.05;
     anchor.userData.meshes.forEach(mesh => {
       if (anchor.userData.highlight) {
-        mesh.layers.enable(1);
+        mesh.layers.enable(BLOOM_SCENE);
       } else {
-        mesh.layers.disable(1);
+        mesh.layers.disable(BLOOM_SCENE);
       }
     });
   });
@@ -584,14 +643,18 @@ function animate() {
     setFocus(target);
   }
 
-  composer.render();
+  scene.traverse(darkenNonBloomed);
+  bloomComposer.render();
+  scene.traverse(restoreMaterial);
+  finalComposer.render();
 }
 
 function onResize() {
   const width = window.innerWidth;
   const height = window.innerHeight;
   renderer.setSize(width, height);
-  composer.setSize(width, height);
+  bloomComposer.setSize(width, height);
+  finalComposer.setSize(width, height);
   camera.aspect = width / height;
   camera.updateProjectionMatrix();
 }
