@@ -18,7 +18,7 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.fog = new THREE.FogExp2(0x0a0416, 0.02); // Brouillard réduit pour mieux voir les objets
+scene.fog = new THREE.FogExp2(0x0a0416, 0.08); // Brouillard pour l'ambiance spatiale
 
 const cameraHolder = new THREE.Object3D();
 scene.add(cameraHolder);
@@ -29,26 +29,29 @@ pivot.add(camera);
 const composer = new EffectComposer(renderer);
 const renderPass = new RenderPass(scene, camera);
 composer.addPass(renderPass);
-// Bloom désactivé pour ne pas rendre les objets trop lumineux
-// const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.8, 0.6, 0.85);
-// bloomPass.threshold = 0.2;
-// bloomPass.strength = 0.9;
-// bloomPass.radius = 0.5;
-// composer.addPass(bloomPass);
+// Bloom pour l'ambiance spatiale
+const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.8, 0.6, 0.85);
+bloomPass.threshold = 0.3;
+bloomPass.strength = 0.7;
+bloomPass.radius = 0.4;
+composer.addPass(bloomPass);
 const vignettePass = new ShaderPass(VignetteShader);
 vignettePass.uniforms['offset'].value = 1.05;
 vignettePass.uniforms['darkness'].value = 1.25;
 composer.addPass(vignettePass);
 
-// Éclairage réduit pour voir les formes et couleurs
-const ambient = new THREE.AmbientLight(0xffffff, 0.4);
+// Éclairage amélioré pour l'ambiance spatiale
+const ambient = new THREE.AmbientLight(0x4a3a7a, 0.5);
 scene.add(ambient);
-const keyLight = new THREE.DirectionalLight(0xffffff, 0.6);
+const keyLight = new THREE.DirectionalLight(0x8a7ab8, 0.8);
 keyLight.position.set(5, 5, 5);
 scene.add(keyLight);
-const fillLight = new THREE.DirectionalLight(0xffffff, 0.3);
+const fillLight = new THREE.DirectionalLight(0x5a4a8a, 0.4);
 fillLight.position.set(-5, 3, -5);
 scene.add(fillLight);
+const rimLight = new THREE.DirectionalLight(0x6a5a9a, 0.5);
+rimLight.position.set(0, -5, -5);
+scene.add(rimLight);
 
 const nebulaUniforms = {
   uTime: { value: 0 },
@@ -257,6 +260,23 @@ let activePopup = null;
 
 const slowMotion = { value: 1 };
 
+// Système de compteur
+function updateCounter() {
+  const counterEl = document.getElementById('counter');
+  if (!counterEl) return;
+  
+  const visited = projectAnchors.filter(a => a.userData.visited).length;
+  const total = projectAnchors.length;
+  
+  counterEl.innerHTML = `${visited}/<span id="total">${total}</span>`;
+  
+  // Animation du compteur
+  gsap.fromTo(counterEl, 
+    { scale: 1.2 },
+    { scale: 1, duration: 0.3, ease: 'back.out' }
+  );
+}
+
 function toggleSlowMotion(active) {
   gsap.to(slowMotion, { value: active ? 0.2 : 1, duration: 0.6, ease: 'sine.out' });
 }
@@ -286,7 +306,7 @@ async function loadProjects() {
       }
     });
     
-    const targetVisualSize = 1.8;
+    const targetVisualSize = 1.0; // Objets plus petits
     normalizeModel(asset, targetVisualSize);
     anchor.add(asset);
 
@@ -304,10 +324,20 @@ async function loadProjects() {
       project,
       asset,
       baseScale: asset.scale.x,
+      basePosition: new THREE.Vector3().copy(anchor.position),
       focusTween: null,
       highlight: false,
+      visited: false,
       floatOffset: Math.random() * Math.PI * 2,
-      rotationSpeed: THREE.MathUtils.randFloat(0.2, 0.45),
+      rotationSpeed: THREE.MathUtils.randFloat(0.08, 0.15), // Rotation plus lente
+      orbitSpeed: THREE.MathUtils.randFloat(0.3, 0.6),
+      orbitRadius: THREE.MathUtils.randFloat(0.3, 0.6),
+      orbitAxis: new THREE.Vector3(
+        THREE.MathUtils.randFloat(-1, 1),
+        THREE.MathUtils.randFloat(-1, 1),
+        THREE.MathUtils.randFloat(-1, 1)
+      ).normalize(),
+      hoverTween: null,
       meshes,
     };
 
@@ -378,6 +408,13 @@ function openPopup(project) {
   if (!popup) return;
   activePopup = popup;
   toggleSlowMotion(true);
+  
+  // Marquer le projet comme visité
+  const anchor = projectAnchors.find(a => a.userData.project.id === project.id);
+  if (anchor && !anchor.userData.visited) {
+    anchor.userData.visited = true;
+    updateCounter();
+  }
   
   // Désactiver le pointer lock pour permettre les clics normaux
   if (document.pointerLockElement === renderer.domElement) {
@@ -473,11 +510,22 @@ function setFocus(target) {
     if (currentTarget.userData.focusTween) {
       currentTarget.userData.focusTween.kill();
     }
+    if (currentTarget.userData.hoverTween) {
+      currentTarget.userData.hoverTween.kill();
+    }
     currentTarget.userData.focusTween = gsap.to(currentTarget.userData.asset.scale, {
       x: currentTarget.userData.baseScale,
       y: currentTarget.userData.baseScale,
       z: currentTarget.userData.baseScale,
       duration: 0.4,
+      ease: 'sine.out',
+    });
+    // Retour à la position de base
+    currentTarget.userData.hoverTween = gsap.to(currentTarget.position, {
+      x: currentTarget.userData.basePosition.x,
+      y: currentTarget.userData.basePosition.y,
+      z: currentTarget.userData.basePosition.z,
+      duration: 0.5,
       ease: 'sine.out',
     });
   }
@@ -487,11 +535,33 @@ function setFocus(target) {
     if (currentTarget.userData.focusTween) {
       currentTarget.userData.focusTween.kill();
     }
+    if (currentTarget.userData.hoverTween) {
+      currentTarget.userData.hoverTween.kill();
+    }
     currentTarget.userData.focusTween = gsap.to(currentTarget.userData.asset.scale, {
-      x: currentTarget.userData.baseScale * 1.2,
-      y: currentTarget.userData.baseScale * 1.2,
-      z: currentTarget.userData.baseScale * 1.2,
+      x: currentTarget.userData.baseScale * 1.15,
+      y: currentTarget.userData.baseScale * 1.15,
+      z: currentTarget.userData.baseScale * 1.15,
       duration: 0.5,
+      ease: 'expo.out',
+    });
+    // Mouvement vers la caméra au survol (depuis la position actuelle)
+    const cameraPos = new THREE.Vector3();
+    camera.getWorldPosition(cameraPos);
+    const currentPos = new THREE.Vector3();
+    currentTarget.getWorldPosition(currentPos);
+    const direction = new THREE.Vector3()
+      .subVectors(cameraPos, currentPos)
+      .normalize()
+      .multiplyScalar(0.8); // Avancer de 0.8 unités vers la caméra
+    const hoverPos = new THREE.Vector3()
+      .copy(currentPos)
+      .add(direction);
+    currentTarget.userData.hoverTween = gsap.to(currentTarget.position, {
+      x: hoverPos.x,
+      y: hoverPos.y,
+      z: hoverPos.z,
+      duration: 0.6,
       ease: 'expo.out',
     });
   }
@@ -523,18 +593,42 @@ function animate() {
 
   projectAnchors.forEach(anchor => {
     const asset = anchor.userData.asset;
-    asset.rotation.y += delta * anchor.userData.rotationSpeed;
-    const float = Math.sin(clock.elapsedTime * 0.6 + anchor.userData.floatOffset) * 0.1;
-    asset.position.y = float;
-    asset.position.z = Math.cos(clock.elapsedTime * 0.4 + anchor.userData.floatOffset) * 0.05;
-    // Layers désactivés pour ne pas ajouter d'effets lumineux
-    // anchor.userData.meshes.forEach(mesh => {
-    //   if (anchor.userData.highlight) {
-    //     mesh.layers.enable(1);
-    //   } else {
-    //     mesh.layers.disable(1);
-    //   }
-    // });
+    const ud = anchor.userData;
+    const t = clock.elapsedTime;
+    
+    // Rotation complexe mais lente
+    asset.rotation.x += delta * ud.rotationSpeed * 0.3;
+    asset.rotation.y += delta * ud.rotationSpeed;
+    asset.rotation.z += delta * ud.rotationSpeed * 0.2;
+    
+    // Mouvement orbital complexe dans l'espace (seulement si pas en hover)
+    if (!ud.highlight) {
+      const orbitAngle = t * ud.orbitSpeed + ud.floatOffset;
+      const orbitOffset = new THREE.Vector3()
+        .copy(ud.orbitAxis)
+        .multiplyScalar(Math.sin(orbitAngle) * ud.orbitRadius);
+      
+      // Flottement vertical
+      const floatY = Math.sin(t * 0.5 + ud.floatOffset) * 0.15;
+      
+      // Position finale avec mouvement orbital
+      anchor.position.copy(ud.basePosition)
+        .add(orbitOffset)
+        .add(new THREE.Vector3(0, floatY, 0));
+    }
+    
+    // Flottement local de l'asset
+    asset.position.y = Math.sin(t * 0.8 + ud.floatOffset) * 0.08;
+    asset.position.x = Math.cos(t * 0.6 + ud.floatOffset) * 0.05;
+    
+    // Bloom sur les objets en focus
+    anchor.userData.meshes.forEach(mesh => {
+      if (anchor.userData.highlight) {
+        mesh.layers.enable(1);
+      } else {
+        mesh.layers.disable(1);
+      }
+    });
   });
 
   if (!activePopup && projectTargets.length) {
@@ -570,6 +664,7 @@ window.addEventListener('resize', onResize);
 
 async function bootstrap() {
   await loadProjects();
+  updateCounter(); // Initialiser le compteur
   if (projectAnchors.length) {
     alignCameraToTarget(projectAnchors[0].position);
     setFocus(projectAnchors[0]);
