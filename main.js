@@ -489,14 +489,14 @@ function setupPopup3D(anchor, canvas) {
     antialias: true, 
     alpha: true 
   });
-  popupRenderer.setSize(400, 400);
+  popupRenderer.setSize(300, 300);
   popupRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   popupRenderer.outputColorSpace = THREE.SRGBColorSpace;
   
   // Créer la scène 3D pour la popup
   popupScene = new THREE.Scene();
   popupCamera = new THREE.PerspectiveCamera(50, 1, 0.1, 100);
-  popupCamera.position.set(0, 0, 5);
+  popupCamera.position.set(0, 0, 4);
   
   // Éclairage pour la popup
   const popupAmbient = new THREE.AmbientLight(0xffffff, 1.0);
@@ -517,17 +517,24 @@ function setupPopup3D(anchor, canvas) {
     }
   });
   
+  // Réinitialiser la position et la rotation de l'objet pour qu'il soit dans le bon sens
+  popupObject.position.set(0, 0, 0);
+  popupObject.rotation.set(0, 0, 0);
+  popupObject.updateMatrixWorld(true);
+  
   // Calculer la taille appropriée pour la popup
   const box = new THREE.Box3().setFromObject(popupObject);
   const size = box.getSize(new THREE.Vector3());
   const maxDim = Math.max(size.x, size.y, size.z);
-  const scale = 2.5 / maxDim; // Taille cible de 2.5 unités
+  const scale = 1.8 / maxDim; // Taille cible réduite pour un espace plus petit
   popupObject.scale.multiplyScalar(scale);
+  popupObject.updateMatrixWorld(true);
   
-  // Centrer l'objet
+  // Centrer l'objet parfaitement
   box.setFromObject(popupObject);
   const center = box.getCenter(new THREE.Vector3());
   popupObject.position.sub(center);
+  popupObject.updateMatrixWorld(true);
   
   popupScene.add(popupObject);
   popupRotation = { x: 0, y: 0 };
