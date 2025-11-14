@@ -265,6 +265,10 @@ function createHTMLPopup(project) {
   popup.className = 'popup-container';
   popup.id = `popup-${project.id}`;
   
+  const githubIcon = project.link ? `<svg class="github-icon" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+    <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+  </svg>` : '';
+  
   popup.innerHTML = `
     <div class="popup-glass">
       <button class="popup-close" aria-label="Fermer">×</button>
@@ -273,12 +277,15 @@ function createHTMLPopup(project) {
           <canvas class="popup-3d-canvas"></canvas>
         </div>
         <div class="popup-content">
-          <h2 class="popup-title">${project.name}</h2>
+          <div class="popup-header">
+            <h2 class="popup-title">${project.name}</h2>
+            ${project.link ? `<a href="${project.link}" target="_blank" class="popup-github-link">
+              ${githubIcon}
+              <span>GitHub</span>
+            </a>` : ''}
+          </div>
           ${project.subtitle ? `<h3 class="popup-subtitle">${project.subtitle}</h3>` : ''}
           <p class="popup-description">${project.description}</p>
-          ${project.link ? `<button class="popup-button" data-link="${project.link}">
-            <span>Voir sur GitHub</span>
-          </button>` : ''}
         </div>
       </div>
     </div>
@@ -292,11 +299,10 @@ function createHTMLPopup(project) {
     closePopup();
   });
   
-  const button = popup.querySelector('.popup-button');
-  if (button && project.link) {
-    button.addEventListener('click', (e) => {
+  const githubLink = popup.querySelector('.popup-github-link');
+  if (githubLink && project.link) {
+    githubLink.addEventListener('click', (e) => {
       e.stopPropagation();
-      window.open(project.link, '_blank');
     });
   }
   
@@ -323,19 +329,133 @@ const slowMotion = { value: 1 };
 
 // Système de compteur
 function updateCounter() {
-  const counterEl = document.getElementById('counter');
-  if (!counterEl) return;
+  const counterValueEl = document.getElementById('counter-value');
+  const totalEl = document.getElementById('total');
+  if (!counterValueEl || !totalEl) return;
   
   const visited = projectAnchors.filter(a => a.userData.visited).length;
   const total = projectAnchors.length;
   
-  counterEl.innerHTML = `${visited}/<span id="total">${total}</span>`;
+  counterValueEl.innerHTML = `${visited}/<span id="total">${total}</span>`;
   
   // Animation du compteur
-  gsap.fromTo(counterEl, 
-    { scale: 1.2 },
-    { scale: 1, duration: 0.3, ease: 'back.out' }
-  );
+  const counterEl = document.getElementById('counter');
+  if (counterEl) {
+    gsap.fromTo(counterEl, 
+      { scale: 1.2 },
+      { scale: 1, duration: 0.3, ease: 'back.out' }
+    );
+  }
+  
+  // Mettre à jour les miniatures
+  updateObjectsBar();
+}
+
+// Système de barre d'objets en bas
+const objectThumbnails = new Map();
+
+function createObjectsBar() {
+  const bar = document.getElementById('objects-bar');
+  if (!bar) return;
+  
+  bar.innerHTML = '';
+  
+  projectsData.forEach((project, index) => {
+    const anchor = projectAnchors[index];
+    if (!anchor) return;
+    
+    const thumbnail = document.createElement('div');
+    thumbnail.className = 'object-thumbnail';
+    thumbnail.dataset.projectId = project.id;
+    
+    const canvas = document.createElement('canvas');
+    canvas.className = 'thumbnail-canvas';
+    canvas.width = 80;
+    canvas.height = 80;
+    thumbnail.appendChild(canvas);
+    
+    // Créer un renderer miniature
+    const thumbRenderer = new THREE.WebGLRenderer({ 
+      canvas: canvas, 
+      antialias: true, 
+      alpha: true 
+    });
+    thumbRenderer.setSize(80, 80);
+    thumbRenderer.setPixelRatio(1);
+    thumbRenderer.outputColorSpace = THREE.SRGBColorSpace;
+    
+    const thumbScene = new THREE.Scene();
+    const thumbCamera = new THREE.PerspectiveCamera(50, 1, 0.1, 100);
+    thumbCamera.position.set(0, 0, 3);
+    
+    // Éclairage minimal
+    const thumbAmbient = new THREE.AmbientLight(0xffffff, 0.8);
+    thumbScene.add(thumbAmbient);
+    const thumbLight = new THREE.DirectionalLight(0xffffff, 0.5);
+    thumbLight.position.set(5, 5, 5);
+    thumbScene.add(thumbLight);
+    
+    // Cloner l'objet pour la miniature
+    const thumbObject = anchor.userData.asset.clone();
+    thumbObject.traverse(node => {
+      if (node.isMesh && node.material) {
+        node.material = node.material.clone();
+      }
+    });
+    
+    // Ajuster la taille
+    const box = new THREE.Box3().setFromObject(thumbObject);
+    const size = box.getSize(new THREE.Vector3());
+    const maxDim = Math.max(size.x, size.y, size.z);
+    const scale = 1.5 / maxDim;
+    thumbObject.scale.multiplyScalar(scale);
+    
+    // Centrer
+    box.setFromObject(thumbObject);
+    const center = box.getCenter(new THREE.Vector3());
+    thumbObject.position.sub(center);
+    thumbObject.position.set(0, 0, 0);
+    
+    thumbScene.add(thumbObject);
+    
+    // Animation de rotation
+    let rotationY = 0;
+    function animateThumb() {
+      if (!thumbRenderer || !thumbScene || !thumbCamera) return;
+      requestAnimationFrame(animateThumb);
+      rotationY += 0.01;
+      thumbObject.rotation.y = rotationY;
+      thumbRenderer.render(thumbScene, thumbCamera);
+    }
+    animateThumb();
+    
+    objectThumbnails.set(project.id, {
+      element: thumbnail,
+      renderer: thumbRenderer,
+      scene: thumbScene,
+      camera: thumbCamera,
+      object: thumbObject
+    });
+    
+    bar.appendChild(thumbnail);
+  });
+  
+  updateObjectsBar();
+}
+
+function updateObjectsBar() {
+  projectsData.forEach((project, index) => {
+    const anchor = projectAnchors[index];
+    if (!anchor) return;
+    
+    const thumbnail = objectThumbnails.get(project.id);
+    if (!thumbnail) return;
+    
+    const isVisited = anchor.userData.visited;
+    thumbnail.element.classList.toggle('found', isVisited);
+    
+    // Le CSS gère déjà le filtre grayscale et l'opacité
+  });
 }
 
 function toggleSlowMotion(active) {
@@ -432,6 +552,7 @@ async function loadProjects() {
     return anchor;
   });
   await Promise.all(promises);
+  createObjectsBar();
 }
 
 let pointerLocked = false;
