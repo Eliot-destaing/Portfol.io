@@ -13,7 +13,7 @@ const loadingOverlay = document.getElementById('loading');
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.0; // Exposition normale pour voir les couleurs
+renderer.toneMappingExposure = 0.7; // Exposition réduite pour moins de luminosité
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
@@ -27,41 +27,26 @@ camera.position.set(0, 1.6, 5);
 const composer = new EffectComposer(renderer);
 const renderPass = new RenderPass(scene, camera);
 composer.addPass(renderPass);
-// Bloom subtil pour les objets en focus
+// Bloom très subtil pour les objets en focus
 const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.8, 0.6, 0.85);
-bloomPass.threshold = 0.5;
-bloomPass.strength = 0.4;
-bloomPass.radius = 0.3;
+bloomPass.threshold = 0.8;
+bloomPass.strength = 0.2;
+bloomPass.radius = 0.2;
 composer.addPass(bloomPass);
 const vignettePass = new ShaderPass(VignetteShader);
 vignettePass.uniforms['offset'].value = 1.05;
-vignettePass.uniforms['darkness'].value = 1.25;
+vignettePass.uniforms['darkness'].value = 1.0; // Réduire la vignette pour moins d'assombrissement
 composer.addPass(vignettePass);
 
-// Éclairage très lumineux pour toute la scène
-const ambient = new THREE.AmbientLight(0xffffff, 1.2); // Lumière ambiante très forte
+// Éclairage modéré pour la scène
+const ambient = new THREE.AmbientLight(0xffffff, 0.6); // Lumière ambiante modérée
 scene.add(ambient);
-const keyLight = new THREE.DirectionalLight(0xffffff, 1.5); // Lumière principale très forte
+const keyLight = new THREE.DirectionalLight(0xffffff, 0.8); // Lumière principale
 keyLight.position.set(5, 5, 5);
 scene.add(keyLight);
-const fillLight = new THREE.DirectionalLight(0xffffff, 1.0); // Lumière de remplissage forte
+const fillLight = new THREE.DirectionalLight(0xffffff, 0.4); // Lumière de remplissage
 fillLight.position.set(-5, 3, -5);
 scene.add(fillLight);
-const rimLight = new THREE.DirectionalLight(0xffffff, 0.8); // Lumière latérale
-rimLight.position.set(0, -5, -5);
-scene.add(rimLight);
-const accentLight = new THREE.DirectionalLight(0xffffff, 0.7); // Lumière d'accent
-accentLight.position.set(0, 5, 0);
-scene.add(accentLight);
-const backLight = new THREE.DirectionalLight(0xffffff, 0.6); // Lumière arrière
-backLight.position.set(0, 0, 5);
-scene.add(backLight);
-const sideLight1 = new THREE.DirectionalLight(0xffffff, 0.5); // Lumière latérale 1
-sideLight1.position.set(5, 0, 0);
-scene.add(sideLight1);
-const sideLight2 = new THREE.DirectionalLight(0xffffff, 0.5); // Lumière latérale 2
-sideLight2.position.set(-5, 0, 0);
-scene.add(sideLight2);
 
 // Éléments spatiaux supprimés - scène neutre
 
@@ -128,6 +113,11 @@ const projectsData = [
 const manager = new THREE.LoadingManager();
 manager.onLoad = () => {
   loadingOverlay.classList.add('hidden');
+  // Masquer le message "Cliquez pour entrer dans la scène"
+  const hint = document.querySelector('.hint');
+  if (hint) {
+    hint.style.display = 'none';
+  }
 };
 const loader = new GLTFLoader(manager);
 manager.onProgress = (url, loaded, total) => {
@@ -404,9 +394,8 @@ async function loadProjects() {
     normalizeModel(asset, targetVisualSize);
     anchor.add(asset);
 
-    // Positionner les objets selon leurs offsets (comme un personnage debout)
-    const offset = project.offset || { x: 0, y: 0, z: 0 };
-    anchor.position.set(offset.x, offset.y, -4.5 + offset.z);
+    // Tous les objets au même endroit au centre - les positions sont déjà correctes dans les fichiers GLB
+    anchor.position.set(0, 0, -4.5);
 
     anchor.userData = {
       project,
