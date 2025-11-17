@@ -394,8 +394,9 @@ async function loadProjects() {
     normalizeModel(asset, targetVisualSize);
     anchor.add(asset);
 
-    // Tous les objets au même endroit au centre - les positions sont déjà correctes dans les fichiers GLB
-    anchor.position.set(0, 0, -4.5);
+    // Positionner les objets selon leurs offsets pour conserver leurs propriétés dans l'espace
+    const offset = project.offset || { x: 0, y: 0, z: 0 };
+    anchor.position.set(offset.x, offset.y, -4.5 + offset.z);
 
     anchor.userData = {
       project,

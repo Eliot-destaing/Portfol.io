@@ -16,7 +16,11 @@ body {
 
 canvas {
   display: block;
-  cursor: none;
+  cursor: grab;
+}
+
+canvas:active {
+  cursor: grabbing;
 }
 
 body.popup-open canvas {
@@ -55,15 +59,6 @@ body.popup-open canvas {
   flex-direction: column;
   gap: 2rem;
   z-index: 5;
-}
-
-.reticle {
-  width: 22px;
-  height: 22px;
-  border: 1px solid rgba(160, 200, 255, 0.6);
-  border-radius: 4px;
-  box-shadow: 0 0 12px rgba(110, 180, 255, 0.4);
-  animation: pulse 2s ease-in-out infinite;
 }
 
 .hint {
