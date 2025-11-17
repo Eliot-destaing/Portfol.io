@@ -75,9 +75,6 @@ body.popup-open canvas {
   text-transform: uppercase;
 }
 
-body.pointerlocked .hint {
-  opacity: 0;
-}
 
 @keyframes pulse {
   0%, 100% {

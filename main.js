@@ -1,6 +1,7 @@
 // Version mise à jour - utilise GLTFLoader
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
@@ -18,14 +19,11 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-// Pas de brouillard - fond neutre
+// Fond gris-bleu clair comme dans la photo
+scene.background = new THREE.Color(0xe8eef5);
 
-const cameraHolder = new THREE.Object3D();
-scene.add(cameraHolder);
-const pivot = new THREE.Object3D();
-cameraHolder.add(pivot);
 const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 60);
-pivot.add(camera);
+camera.position.set(0, 1.6, 5);
 const composer = new EffectComposer(renderer);
 const renderPass = new RenderPass(scene, camera);
 composer.addPass(renderPass);
@@ -90,7 +88,7 @@ const projectsData = [
     link: null,
     taille: 0.8,
     lumiereMax: 1.0,
-    offset: { x: 0, y: 0, z: 0 },
+    offset: { x: 0.3, y: 0.5, z: 0.2 },
   },
   {
     id: 'ballon',
@@ -101,7 +99,7 @@ const projectsData = [
     link: null,
     taille: 0.6,
     lumiereMax: 1.0,
-    offset: { x: 0, y: 0, z: 0 },
+    offset: { x: -0.4, y: 0.2, z: 0.3 },
   },
   {
     id: 'chaussures',
@@ -112,7 +110,7 @@ const projectsData = [
     link: null,
     taille: 0.7,
     lumiereMax: 1.0,
-    offset: { x: 0, y: 0, z: 0 },
+    offset: { x: 0.2, y: -0.8, z: 0.1 },
   },
   {
     id: 'pantalon',
@@ -123,7 +121,7 @@ const projectsData = [
     link: null,
     taille: 0.9,
     lumiereMax: 1.0,
-    offset: { x: 0, y: 0, z: 0 },
+    offset: { x: -0.2, y: -0.3, z: 0.2 },
   },
 ];
 
@@ -406,8 +404,9 @@ async function loadProjects() {
     normalizeModel(asset, targetVisualSize);
     anchor.add(asset);
 
-    // Tous les objets au même endroit au milieu de la scène (comme un personnage debout)
-    anchor.position.set(0, 0, -4.5);
+    // Positionner les objets selon leurs offsets (comme un personnage debout)
+    const offset = project.offset || { x: 0, y: 0, z: 0 };
+    anchor.position.set(offset.x, offset.y, -4.5 + offset.z);
 
     anchor.userData = {
       project,
@@ -436,35 +435,18 @@ async function loadProjects() {
   createObjectsBar();
 }
 
-let pointerLocked = false;
-const sensitivity = 0.0028;
-const cameraAngles = { yaw: 0, pitch: 0 };
-
-function updateCameraRotation(dx, dy) {
-  cameraAngles.yaw -= dx * sensitivity;
-  cameraAngles.pitch -= dy * sensitivity;
-  cameraAngles.pitch = Math.max(-Math.PI / 2 + 0.1, Math.min(Math.PI / 2 - 0.1, cameraAngles.pitch));
-  pivot.rotation.set(cameraAngles.pitch, cameraAngles.yaw, 0, 'YXZ');
-}
-
-document.addEventListener('pointerlockchange', () => {
-  pointerLocked = document.pointerLockElement === renderer.domElement;
-  document.body.classList.toggle('pointerlocked', pointerLocked);
-  // Ne pas fermer la popup si elle est ouverte, on veut juste désactiver le pointer lock
-  // La popup sera fermée manuellement par l'utilisateur
-});
+// Contrôles OrbitControls pour rotation autour des objets
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 0, -4.5);
+controls.enableDamping = true;
+controls.dampingFactor = 0.05;
+controls.minDistance = 2;
+controls.maxDistance = 10;
+controls.maxPolarAngle = Math.PI / 2;
+controls.minPolarAngle = Math.PI / 3;
 
 renderer.domElement.addEventListener('click', () => {
-  if (!pointerLocked) {
-    renderer.domElement.requestPointerLock();
-    return;
-  }
   handleSelection();
-});
-
-document.addEventListener('mousemove', event => {
-  if (!pointerLocked) return;
-  updateCameraRotation(event.movementX, event.movementY);
 });
 
 document.addEventListener('keydown', event => {
@@ -634,11 +616,6 @@ function openPopup(project) {
   anchor.userData.originalRotation = anchor.rotation.clone();
   anchor.userData.originalScale = anchor.userData.asset.scale.clone();
   
-  // Désactiver le pointer lock pour permettre les clics normaux
-  if (document.pointerLockElement === renderer.domElement) {
-    document.exitPointerLock();
-  }
-  
   // Ajouter la classe pour désactiver les interactions avec le canvas
   document.body.classList.add('popup-open');
   
@@ -739,75 +716,18 @@ function closePopup() {
     ease: 'expo.in',
     onComplete: () => {
       popup.style.display = 'none';
-      // Réactiver le pointer lock après la fermeture
-      if (!document.pointerLockElement) {
-        renderer.domElement.requestPointerLock();
-      }
     }
   });
 }
 
 function setFocus(target) {
-  if (currentTarget === target) return;
+  // Pas d'agrandissement ni de mouvement au survol
   if (currentTarget) {
     currentTarget.userData.highlight = false;
-    if (currentTarget.userData.focusTween) {
-      currentTarget.userData.focusTween.kill();
-    }
-    if (currentTarget.userData.hoverTween) {
-      currentTarget.userData.hoverTween.kill();
-    }
-    currentTarget.userData.focusTween = gsap.to(currentTarget.userData.asset.scale, {
-      x: currentTarget.userData.baseScale,
-      y: currentTarget.userData.baseScale,
-      z: currentTarget.userData.baseScale,
-      duration: 0.4,
-      ease: 'sine.out',
-    });
-    // Retour à la position de base
-    currentTarget.userData.hoverTween = gsap.to(currentTarget.position, {
-      x: currentTarget.userData.basePosition.x,
-      y: currentTarget.userData.basePosition.y,
-      z: currentTarget.userData.basePosition.z,
-      duration: 0.5,
-      ease: 'sine.out',
-    });
   }
   currentTarget = target;
   if (currentTarget) {
     currentTarget.userData.highlight = true;
-    if (currentTarget.userData.focusTween) {
-      currentTarget.userData.focusTween.kill();
-    }
-    if (currentTarget.userData.hoverTween) {
-      currentTarget.userData.hoverTween.kill();
-    }
-    currentTarget.userData.focusTween = gsap.to(currentTarget.userData.asset.scale, {
-      x: currentTarget.userData.baseScale * 1.15,
-      y: currentTarget.userData.baseScale * 1.15,
-      z: currentTarget.userData.baseScale * 1.15,
-      duration: 0.5,
-      ease: 'expo.out',
-    });
-    // Mouvement vers la caméra au survol (depuis la position actuelle)
-    const cameraPos = new THREE.Vector3();
-    camera.getWorldPosition(cameraPos);
-    const currentPos = new THREE.Vector3();
-    currentTarget.getWorldPosition(currentPos);
-    const direction = new THREE.Vector3()
-      .subVectors(cameraPos, currentPos)
-      .normalize()
-      .multiplyScalar(0.8); // Avancer de 0.8 unités vers la caméra
-    const hoverPos = new THREE.Vector3()
-      .copy(currentPos)
-      .add(direction);
-    currentTarget.userData.hoverTween = gsap.to(currentTarget.position, {
-      x: hoverPos.x,
-      y: hoverPos.y,
-      z: hoverPos.z,
-      duration: 0.6,
-      ease: 'expo.out',
-    });
   }
 }
 
@@ -815,32 +735,21 @@ const tempDir = new THREE.Vector3();
 const tempPos = new THREE.Vector3();
 const clock = new THREE.Clock();
 
-function alignCameraToTarget(position) {
-  const dir = position.clone().normalize();
-  const yaw = Math.atan2(dir.x, -dir.z);
-  const pitch = Math.atan2(dir.y, Math.sqrt(dir.x * dir.x + dir.z * dir.z));
-  cameraAngles.yaw = yaw;
-  cameraAngles.pitch = THREE.MathUtils.clamp(pitch, -Math.PI / 2 + 0.1, Math.PI / 2 - 0.1);
-  pivot.rotation.set(cameraAngles.pitch, cameraAngles.yaw, 0, 'YXZ');
-}
+// Fonction alignCameraToTarget supprimée - OrbitControls gère la caméra
 
 function animate() {
   requestAnimationFrame(animate);
   const delta = clock.getDelta() * slowMotion.value;
 
+  // Mettre à jour les contrôles OrbitControls
+  controls.update();
+
   projectAnchors.forEach(anchor => {
     const asset = anchor.userData.asset;
     const ud = anchor.userData;
-    const t = clock.elapsedTime;
     
-    // Rotation très lente et subtile
-    asset.rotation.y += delta * ud.rotationSpeed;
-    
-    // Légère animation de flottement (seulement si pas en hover)
-    if (!ud.highlight) {
-      const floatY = Math.sin(t * 0.5 + ud.floatOffset) * 0.05;
-      anchor.position.y = ud.basePosition.y + floatY;
-    }
+    // Pas de rotation automatique
+    // Pas d'animation de flottement - position fixe
     
     // Bloom sur les objets en focus
     anchor.userData.meshes.forEach(mesh => {
@@ -880,14 +789,28 @@ function onResize() {
   composer.setSize(width, height);
   camera.aspect = width / height;
   camera.updateProjectionMatrix();
+  controls.handleResize();
 }
 window.addEventListener('resize', onResize);
 
 async function bootstrap() {
   await loadProjects();
+  
+  // Créer un sol à la hauteur des bottes (environ -0.8)
+  const floorGeometry = new THREE.PlaneGeometry(20, 20);
+  const floorMaterial = new THREE.MeshStandardMaterial({
+    color: 0xd4dde8,
+    roughness: 0.8,
+    metalness: 0.1
+  });
+  const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.y = -0.8;
+  floor.receiveShadow = true;
+  scene.add(floor);
+  
   updateCounter(); // Initialiser le compteur
   if (projectAnchors.length) {
-    alignCameraToTarget(projectAnchors[0].position);
     setFocus(projectAnchors[0]);
   }
   animate();
