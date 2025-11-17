@@ -18,7 +18,7 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.fog = new THREE.FogExp2(0x0a0416, 0.05); // Brouillard réduit pour mieux voir les objets
+// Pas de brouillard - fond neutre
 
 const cameraHolder = new THREE.Object3D();
 scene.add(cameraHolder);
@@ -29,11 +29,11 @@ pivot.add(camera);
 const composer = new EffectComposer(renderer);
 const renderPass = new RenderPass(scene, camera);
 composer.addPass(renderPass);
-// Bloom pour l'ambiance spatiale
+// Bloom subtil pour les objets en focus
 const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.8, 0.6, 0.85);
-bloomPass.threshold = 0.3;
-bloomPass.strength = 0.7;
-bloomPass.radius = 0.4;
+bloomPass.threshold = 0.5;
+bloomPass.strength = 0.4;
+bloomPass.radius = 0.3;
 composer.addPass(bloomPass);
 const vignettePass = new ShaderPass(VignetteShader);
 vignettePass.uniforms['offset'].value = 1.05;
@@ -65,152 +65,65 @@ const sideLight2 = new THREE.DirectionalLight(0xffffff, 0.5); // Lumière latér
 sideLight2.position.set(-5, 0, 0);
 scene.add(sideLight2);
 
-const nebulaUniforms = {
-  uTime: { value: 0 },
-  uColorInner: { value: new THREE.Color(0x5d4b73) }, // Encore plus lumineux
-  uColorOuter: { value: new THREE.Color(0x2a1b3f) }, // Encore plus lumineux
-  uAccent: { value: new THREE.Color(0x9470d8) }, // Encore plus lumineux
-};
-const nebulaMaterial = new THREE.ShaderMaterial({
-  side: THREE.BackSide,
-  depthWrite: false,
-  transparent: true,
-  uniforms: nebulaUniforms,
-  fragmentShader: /* glsl */`
-    uniform vec3 uColorInner;
-    uniform vec3 uColorOuter;
-    uniform vec3 uAccent;
-    uniform float uTime;
-    varying vec3 vPos;
-    float noise(vec3 p){
-      vec3 i = floor(p);
-      vec3 f = fract(p);
-      f = f*f*(3.0-2.0*f);
-      float n = dot(i, vec3(1.0, 57.0, 113.0));
-      return mix(mix(mix(fract(sin(n+0.0)*43758.5453), fract(sin(n+1.0)*43758.5453), f.x),
-                     mix(fract(sin(n+57.0)*43758.5453), fract(sin(n+58.0)*43758.5453), f.x), f.y),
-                 mix(mix(fract(sin(n+113.0)*43758.5453), fract(sin(n+114.0)*43758.5453), f.x),
-                     mix(fract(sin(n+170.0)*43758.5453), fract(sin(n+171.0)*43758.5453), f.x), f.y), f.z);
-    }
-    void main(){
-      float radius = length(vPos);
-      float gradient = smoothstep(1.0, 0.0, radius * 0.11);
-      float distort = noise(vPos * 0.15 + uTime * 0.015);
-      float glow = pow(1.0 - radius * 0.08, 4.0);
-      vec3 base = mix(uColorOuter, uColorInner, gradient);
-      vec3 color = mix(base, uAccent, distort * 0.35 + glow * 0.4);
-      float alpha = clamp(gradient * 1.4, 0.0, 0.9);
-      gl_FragColor = vec4(color, alpha);
-    }
-  `,
-  vertexShader: /* glsl */`
-    varying vec3 vPos;
-    void main(){
-      vPos = position;
-      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-    }
-  `,
-});
-const nebula = new THREE.Mesh(new THREE.SphereGeometry(30, 64, 64), nebulaMaterial);
-scene.add(nebula);
-
-const dustCount = 1400;
-const dustGeometry = new THREE.BufferGeometry();
-const dustPositions = new Float32Array(dustCount * 3);
-for (let i = 0; i < dustCount; i++) {
-  const radius = THREE.MathUtils.randFloat(6, 13);
-  const theta = Math.random() * Math.PI * 2;
-  const phi = Math.acos(THREE.MathUtils.randFloatSpread(2));
-  const x = radius * Math.sin(phi) * Math.cos(theta);
-  const y = radius * Math.cos(phi) * THREE.MathUtils.randFloat(0.8, 1.0);
-  const z = radius * Math.sin(phi) * Math.sin(theta);
-  dustPositions.set([x, y, z], i * 3);
-}
-dustGeometry.setAttribute('position', new THREE.BufferAttribute(dustPositions, 3));
-const dustMaterial = new THREE.PointsMaterial({
-  color: 0xd2d6ff,
-  size: 0.06,
-  transparent: true,
-  opacity: 0.6,
-  sizeAttenuation: true,
-  depthWrite: false,
-});
-const dust = new THREE.Points(dustGeometry, dustMaterial);
-scene.add(dust);
-
-const debrisGroup = new THREE.Group();
-scene.add(debrisGroup);
-const debrisMaterial = new THREE.MeshStandardMaterial({
-  color: 0x485079,
-  metalness: 0.1,
-  roughness: 0.8,
-  emissive: new THREE.Color(0x111424),
-});
-// Débris de plusieurs tailles, plus loin dans le décor
-const debrisSizes = [0.05, 0.1, 0.15, 0.2, 0.3, 0.4, 0.5, 0.7];
-for (let i = 0; i < 120; i++) {
-  const size = debrisSizes[Math.floor(Math.random() * debrisSizes.length)];
-  const geometry = new THREE.TetrahedronGeometry(size, 1);
-  const mesh = new THREE.Mesh(geometry, debrisMaterial.clone());
-  const pos = new THREE.Vector3().randomDirection().multiplyScalar(THREE.MathUtils.randFloat(8.0, 25.0)); // Plus loin
-  mesh.position.copy(pos);
-  mesh.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
-  mesh.material.emissiveIntensity = THREE.MathUtils.randFloat(0.1, 0.5);
-  mesh.userData.spin = new THREE.Vector3().set(Math.random(), Math.random(), Math.random()).multiplyScalar(THREE.MathUtils.randFloat(0.1, 0.4));
-  debrisGroup.add(mesh);
-}
+// Éléments spatiaux supprimés - scène neutre
 
 
-const goldenRatio = (1 + Math.sqrt(5)) / 2;
+// Données des objets de l'avatar
 const projectsData = [
   {
-    id: 'semestre_bolivie',
-    name: 'Semestre Bolivie',
-    subtitle: 'Carnet d\'exploration à La Paz & Uyuni',
-    file: 'objet3d/alpaga porte-clés 3d.glb',
-    description:
-      'Journal visuel de mission universitaire en Bolivie — immersion terrain, reportage photographique et narration sensible des communautés andines.',
-    link: 'https://github.com/example/semestre-bolivie',
-    // Paramètres personnalisés par objet
-    distance: 4.2,      // Distance depuis le centre
-    taille: 1.0,        // Taille de l'objet
-    lumiereMax: 1.0,    // Multiplicateur de luminosité (1.0 = normal)
-  },
-  {
-    id: 'retro_game_unity',
-    name: 'Retro Game Unity',
-    subtitle: 'Jeu Unity style années 90',
-    file: 'objet3d/game boy modèle 3d.glb',
-    description:
-      'Jeu Unity inspiré des consoles 90s avec shaders CRT, scoring arcade et animations low-poly.',
-    link: 'https://github.com/example/retro-game-unity',
-    distance: 4.2,
+    id: 'moi',
+    name: 'Moi',
+    subtitle: 'Avatar principal',
+    file: 'Objets/moi.glb',
+    description: 'Mon avatar 3D personnalisé.',
+    link: null,
     taille: 1.0,
     lumiereMax: 1.0,
+    offset: { x: 0, y: 0, z: 0 },
   },
   {
-    id: 'stage_ministere',
-    name: 'Stage Ministère des Armées',
-    subtitle: 'Stage de 18 semaines',
-    file: 'objet3d/casque.glb',
-    description:
-      'Stage de 18 semaines au ministère des armées — développement d\'applications et systèmes pour la défense.',
-    link: null, // Pas de GitHub
-    distance: 4.2,
-    taille: 1.0,
-    lumiereMax: 0.5,    // Casque moins lumineux
+    id: 'badge',
+    name: 'Badge',
+    subtitle: 'Badge d\'identification',
+    file: 'Objets/badge.glb',
+    description: 'Mon badge d\'identification professionnel.',
+    link: null,
+    taille: 0.8,
+    lumiereMax: 1.0,
+    offset: { x: 0, y: 0, z: 0 },
   },
   {
-    id: 'projet_ero',
-    name: 'Projet ERO',
-    subtitle: 'Parcours de graphes dans la ville de Montréal',
-    file: 'objet3d/deneigeuse.glb',
-    description:
-      'Optimisation de parcours de graphes pour la gestion de la déneigement dans la ville de Montréal Optimisation de parcours de graphes pour la gestion de la déneigement dans la ville de MontréalOptimisation de parcours de graphes pour la gestion de la déneigement dans la ville de MontréalOptimisation de parcours de graphes pour la gestion de la déneigement dans la ville de MontréalOptimisation de parcours de graphes pour la gestion de la déneigement dans la ville de MontréalOptimisation de parcours de graphes pour la gestion de la déneigement dans la ville de Montréal— développement en Python.',
-    link: 'https://github.com/example/projet-ero',
-    distance: 8.2,
-    taille: 5.5,        // Déneigeuse plus grande
-    lumiereMax: 0.7,
+    id: 'ballon',
+    name: 'Ballon',
+    subtitle: 'Ballon de basket',
+    file: 'Objets/ballon.glb',
+    description: 'Mon ballon de basket préféré.',
+    link: null,
+    taille: 0.6,
+    lumiereMax: 1.0,
+    offset: { x: 0, y: 0, z: 0 },
+  },
+  {
+    id: 'chaussures',
+    name: 'Chaussures',
+    subtitle: 'Mes chaussures',
+    file: 'Objets/chaussures.glb',
+    description: 'Mes chaussures préférées.',
+    link: null,
+    taille: 0.7,
+    lumiereMax: 1.0,
+    offset: { x: 0, y: 0, z: 0 },
+  },
+  {
+    id: 'pantalon',
+    name: 'Pantalon',
+    subtitle: 'Mon pantalon',
+    file: 'Objets/pantalon.glb',
+    description: 'Mon pantalon préféré.',
+    link: null,
+    taille: 0.9,
+    lumiereMax: 1.0,
+    offset: { x: 0, y: 0, z: 0 },
   },
 ];
 
@@ -221,7 +134,7 @@ manager.onLoad = () => {
 const loader = new GLTFLoader(manager);
 manager.onProgress = (url, loaded, total) => {
   if (!loadingOverlay.classList.contains('hidden')) {
-    loadingOverlay.textContent = `Chargement des artefacts ${loaded} / ${total}`;
+    loadingOverlay.textContent = `Chargement des objets ${loaded} / ${total}`;
   }
 };
 
@@ -249,16 +162,7 @@ function normalizeModel(object, targetSize = 1.6) {
   return object.scale.x;
 }
 
-function fibonacciSphere(index, total, radius) {
-  const i = index + 0.5;
-  const phi = Math.acos(1 - 2 * i / total);
-  const theta = 2 * Math.PI * i / goldenRatio;
-  return new THREE.Vector3(
-    radius * Math.sin(phi) * Math.cos(theta),
-    radius * Math.cos(phi),
-    radius * Math.sin(phi) * Math.sin(theta)
-  );
-}
+// Fonction fibonacciSphere supprimée - tous les objets au même endroit
 
 function createHTMLPopup(project) {
   const popup = document.createElement('div');
@@ -462,15 +366,7 @@ function toggleSlowMotion(active) {
   gsap.to(slowMotion, { value: active ? 0.2 : 1, duration: 0.6, ease: 'sine.out' });
 }
 
-function orientTowardsCenter(object) {
-  const target = new THREE.Vector3();
-  object.getWorldPosition(target);
-  const lookAtMatrix = new THREE.Matrix4();
-  lookAtMatrix.lookAt(target, new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 1, 0));
-  const quat = new THREE.Quaternion().setFromRotationMatrix(lookAtMatrix);
-  object.quaternion.copy(quat);
-  object.rotateY(Math.PI);
-}
+// Fonction orientTowardsCenter supprimée - objets positionnés directement
 
 async function loadProjects() {
   const promises = projectsData.map(async (project, index) => {
@@ -510,16 +406,8 @@ async function loadProjects() {
     normalizeModel(asset, targetVisualSize);
     anchor.add(asset);
 
-    let pos;
-    if (projectsData.length === 1) {
-      pos = new THREE.Vector3(0, 0, -4.5);
-    } else {
-      // Utiliser la distance personnalisée
-      const radius = project.distance !== undefined ? project.distance : 4.2;
-      pos = fibonacciSphere(index, projectsData.length, radius);
-    }
-    anchor.position.copy(pos);
-    orientTowardsCenter(anchor);
+    // Tous les objets au même endroit au milieu de la scène (comme un personnage debout)
+    anchor.position.set(0, 0, -4.5);
 
     anchor.userData = {
       project,
@@ -530,14 +418,7 @@ async function loadProjects() {
       highlight: false,
       visited: false,
       floatOffset: Math.random() * Math.PI * 2,
-      rotationSpeed: THREE.MathUtils.randFloat(0.08, 0.15), // Rotation plus lente
-      orbitSpeed: THREE.MathUtils.randFloat(0.3, 0.6),
-      orbitRadius: THREE.MathUtils.randFloat(0.3, 0.6),
-      orbitAxis: new THREE.Vector3(
-        THREE.MathUtils.randFloat(-1, 1),
-        THREE.MathUtils.randFloat(-1, 1),
-        THREE.MathUtils.randFloat(-1, 1)
-      ).normalize(),
+      rotationSpeed: THREE.MathUtils.randFloat(0.02, 0.05), // Rotation très lente
       hoverTween: null,
       meshes,
     };
@@ -649,7 +530,7 @@ function setupPopup3D(anchor, canvas) {
   const box = new THREE.Box3().setFromObject(popupObject);
   const size = box.getSize(new THREE.Vector3());
   const maxDim = Math.max(size.x, size.y, size.z);
-  const scale = 1.8 / maxDim; // Taille cible réduite pour un espace plus petit
+  const scale = 1.8 / maxDim;
   popupObject.scale.multiplyScalar(scale);
   popupObject.updateMatrixWorld(true);
   
@@ -946,44 +827,20 @@ function alignCameraToTarget(position) {
 function animate() {
   requestAnimationFrame(animate);
   const delta = clock.getDelta() * slowMotion.value;
-  nebulaUniforms.uTime.value += delta;
-
-  debrisGroup.children.forEach(mesh => {
-    mesh.rotation.x += mesh.userData.spin.x * delta;
-    mesh.rotation.y += mesh.userData.spin.y * delta;
-    mesh.rotation.z += mesh.userData.spin.z * delta;
-  });
-
 
   projectAnchors.forEach(anchor => {
     const asset = anchor.userData.asset;
     const ud = anchor.userData;
     const t = clock.elapsedTime;
     
-    // Rotation complexe mais lente
-    asset.rotation.x += delta * ud.rotationSpeed * 0.3;
+    // Rotation très lente et subtile
     asset.rotation.y += delta * ud.rotationSpeed;
-    asset.rotation.z += delta * ud.rotationSpeed * 0.2;
     
-    // Mouvement orbital complexe dans l'espace (seulement si pas en hover)
+    // Légère animation de flottement (seulement si pas en hover)
     if (!ud.highlight) {
-      const orbitAngle = t * ud.orbitSpeed + ud.floatOffset;
-      const orbitOffset = new THREE.Vector3()
-        .copy(ud.orbitAxis)
-        .multiplyScalar(Math.sin(orbitAngle) * ud.orbitRadius);
-      
-      // Flottement vertical
-      const floatY = Math.sin(t * 0.5 + ud.floatOffset) * 0.15;
-      
-      // Position finale avec mouvement orbital
-      anchor.position.copy(ud.basePosition)
-        .add(orbitOffset)
-        .add(new THREE.Vector3(0, floatY, 0));
+      const floatY = Math.sin(t * 0.5 + ud.floatOffset) * 0.05;
+      anchor.position.y = ud.basePosition.y + floatY;
     }
-    
-    // Flottement local de l'asset
-    asset.position.y = Math.sin(t * 0.8 + ud.floatOffset) * 0.08;
-    asset.position.x = Math.cos(t * 0.6 + ud.floatOffset) * 0.05;
     
     // Bloom sur les objets en focus
     anchor.userData.meshes.forEach(mesh => {

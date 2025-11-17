@@ -6,8 +6,12 @@
 body {
   margin: 0;
   overflow: hidden;
-  background: radial-gradient(120% 120% at 50% 35%, rgba(35, 12, 60, 0.95), rgba(5, 5, 20, 1));
-  color: #f7f7ff;
+  background: linear-gradient(135deg, #e8eef5 0%, #d4dde8 100%);
+  color: #2a2a2a;
+}
+
+.scene {
+  background: linear-gradient(135deg, #e8eef5 0%, #d4dde8 100%);
 }
 
 canvas {
@@ -30,7 +34,8 @@ body.popup-open canvas {
   font-weight: 500;
   letter-spacing: 0.2rem;
   text-transform: uppercase;
-  background: rgba(6, 5, 16, 0.85);
+  background: rgba(232, 238, 245, 0.95);
+  color: #2a2a2a;
   transition: opacity 0.6s ease, visibility 0.6s ease;
   z-index: 10;
 }
