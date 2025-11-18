@@ -19,13 +19,13 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-// Fond en dégradé (blanc en haut, gris-bleu en bas)
+// Fond en dégradé vertical (blanc/clair en haut, gris-bleu en bas) comme dans l'image
 const gradientShader = {
   uniforms: {
     topColor: { value: new THREE.Color(0xffffff) },
-    bottomColor: { value: new THREE.Color(0xe8eef5) },
+    bottomColor: { value: new THREE.Color(0xd4dde8) },
     offset: { value: 0 },
-    exponent: { value: 0.6 }
+    exponent: { value: 0.8 }
   },
   vertexShader: `
     varying vec3 vWorldPosition;
@@ -43,6 +43,7 @@ const gradientShader = {
     varying vec3 vWorldPosition;
     void main() {
       float h = normalize(vWorldPosition + offset).y;
+      // Dégradé vertical doux du blanc en haut vers gris-bleu en bas
       gl_FragColor = vec4(mix(bottomColor, topColor, max(pow(max(h, 0.0), exponent), 0.0)), 1.0);
     }
   `
@@ -850,7 +851,7 @@ window.addEventListener('resize', onResize);
 async function bootstrap() {
   await loadProjects();
   
-  // Créer un sol à la hauteur des bottes (environ -0.8)
+  // Créer un sol sous les bottes (les objets sont agrandis 2.5x, donc le sol doit être plus bas)
   const floorGeometry = new THREE.PlaneGeometry(20, 20);
   const floorMaterial = new THREE.MeshStandardMaterial({
     color: 0xd4dde8,
@@ -859,7 +860,7 @@ async function bootstrap() {
   });
   const floor = new THREE.Mesh(floorGeometry, floorMaterial);
   floor.rotation.x = -Math.PI / 2;
-  floor.position.y = -0.8;
+  floor.position.y = -2.0; // Sol plus bas pour être sous les bottes agrandies
   floor.receiveShadow = true;
   scene.add(floor);
   
