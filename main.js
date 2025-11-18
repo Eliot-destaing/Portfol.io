@@ -438,8 +438,8 @@ async function loadProjects() {
       }
     });
     
-    // Normaliser tous les objets à la même taille pour uniformiser
-    normalizeModel(asset, 1.6);
+    // Ne PAS modifier les positions ni les tailles - garder exactement comme dans Blender
+    // Les objets ont déjà leurs positions correctes dans l'espace
     anchor.add(asset);
     
     // Positionner le groupe au centre de la scène, mais garder les positions relatives des objets
