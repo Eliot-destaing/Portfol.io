@@ -54,7 +54,7 @@ const gradientMesh = new THREE.Mesh(gradientGeometry, gradientMaterial);
 scene.add(gradientMesh);
 
 const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 60);
-camera.position.set(0, 1.6, 5);
+camera.position.set(0, 1.6, 3);
 const composer = new EffectComposer(renderer);
 const renderPass = new RenderPass(scene, camera);
 composer.addPass(renderPass);
@@ -438,8 +438,8 @@ async function loadProjects() {
       }
     });
     
-    // Ne PAS modifier les positions ni les tailles - garder exactement comme dans Blender
-    // Les objets ont déjà leurs positions correctes dans l'espace
+    // Agrandir les objets pour qu'ils soient plus visibles
+    asset.scale.multiplyScalar(2.5);
     anchor.add(asset);
     
     // Positionner le groupe au centre de la scène, mais garder les positions relatives des objets
@@ -477,8 +477,8 @@ const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.set(0, 0, -4.5);
 controls.enableDamping = true;
 controls.dampingFactor = 0.05;
-controls.minDistance = 2;
-controls.maxDistance = 10;
+controls.minDistance = 1;
+controls.maxDistance = 6;
 controls.maxPolarAngle = Math.PI / 2;
 controls.minPolarAngle = Math.PI / 3;
 
