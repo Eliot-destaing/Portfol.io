@@ -91,7 +91,7 @@ const projectsData = [
     file: 'Objets/moi.glb',
     description: 'Mon avatar 3D personnalisé.',
     link: null,
-    taille: 1.0,
+    taille: 0.8,
     lumiereMax: 1.0,
     offset: { x: 0, y: 0, z: 0 },
   },
@@ -420,8 +420,12 @@ async function loadProjects() {
       }
     });
     
-    // Ne pas modifier la taille ni la position - garder les propriétés originales du GLB
+    // Ne pas modifier la position - garder les propriétés originales du GLB
     // Les objets sont déjà bien positionnés dans Blender
+    // Mais ajuster la taille si nécessaire (pour "moi" qui est trop grand)
+    if (project.taille && project.taille !== 1.0) {
+      asset.scale.multiplyScalar(project.taille);
+    }
     anchor.add(asset);
     
     // Positionner le groupe au centre de la scène, mais garder les positions relatives des objets
@@ -464,8 +468,8 @@ controls.maxDistance = 10;
 controls.maxPolarAngle = Math.PI / 2;
 controls.minPolarAngle = Math.PI / 3;
 
-renderer.domElement.addEventListener('click', () => {
-  handleSelection();
+renderer.domElement.addEventListener('click', (event) => {
+  handleSelection(event);
 });
 
 document.addEventListener('keydown', event => {
@@ -477,13 +481,30 @@ document.addEventListener('keydown', event => {
 const raycaster = new THREE.Raycaster();
 let currentTarget = null;
 
-function handleSelection() {
+function handleSelection(event) {
   if (activePopup) {
     closePopup();
     return;
   }
-  if (currentTarget) {
-    openPopup(currentTarget.userData.project);
+  
+  // Utiliser les coordonnées de la souris pour le raycaster
+  const mouse = new THREE.Vector2();
+  const rect = renderer.domElement.getBoundingClientRect();
+  mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+  
+  raycaster.setFromCamera(mouse, camera);
+  const intersects = raycaster.intersectObjects(projectTargets, true);
+  
+  if (intersects.length > 0) {
+    // Trouver l'objet parent qui a un projet
+    let parent = intersects[0].object;
+    while (parent && !parent.userData.project && parent.parent) {
+      parent = parent.parent;
+    }
+    if (parent && parent.userData.project) {
+      openPopup(parent.userData.project);
+    }
   }
 }
 
