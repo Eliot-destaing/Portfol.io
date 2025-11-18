@@ -13,7 +13,7 @@ const loadingOverlay = document.getElementById('loading');
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 0.7; // Exposition réduite pour moins de luminosité
+renderer.toneMappingExposure = 1.2; // Exposition augmentée pour plus de luminosité
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
@@ -69,15 +69,33 @@ vignettePass.uniforms['offset'].value = 1.05;
 vignettePass.uniforms['darkness'].value = 1.0; // Réduire la vignette pour moins d'assombrissement
 composer.addPass(vignettePass);
 
-// Éclairage modéré pour la scène
-const ambient = new THREE.AmbientLight(0xffffff, 0.6); // Lumière ambiante modérée
+// Éclairage très lumineux pour bien voir les objets
+const ambient = new THREE.AmbientLight(0xffffff, 1.5); // Lumière ambiante très forte
 scene.add(ambient);
-const keyLight = new THREE.DirectionalLight(0xffffff, 0.8); // Lumière principale
+const keyLight = new THREE.DirectionalLight(0xffffff, 2.0); // Lumière principale très forte
 keyLight.position.set(5, 5, 5);
 scene.add(keyLight);
-const fillLight = new THREE.DirectionalLight(0xffffff, 0.4); // Lumière de remplissage
+const fillLight = new THREE.DirectionalLight(0xffffff, 1.5); // Lumière de remplissage forte
 fillLight.position.set(-5, 3, -5);
 scene.add(fillLight);
+const rimLight = new THREE.DirectionalLight(0xffffff, 1.2); // Lumière latérale
+rimLight.position.set(0, -5, -5);
+scene.add(rimLight);
+const accentLight = new THREE.DirectionalLight(0xffffff, 1.0); // Lumière d'accent
+accentLight.position.set(0, 5, 0);
+scene.add(accentLight);
+const backLight = new THREE.DirectionalLight(0xffffff, 1.0); // Lumière arrière
+backLight.position.set(0, 0, 5);
+scene.add(backLight);
+const sideLight1 = new THREE.DirectionalLight(0xffffff, 0.8); // Lumière latérale 1
+sideLight1.position.set(5, 0, 0);
+scene.add(sideLight1);
+const sideLight2 = new THREE.DirectionalLight(0xffffff, 0.8); // Lumière latérale 2
+sideLight2.position.set(-5, 0, 0);
+scene.add(sideLight2);
+const topLight = new THREE.DirectionalLight(0xffffff, 1.2); // Lumière du dessus
+topLight.position.set(0, 10, 0);
+scene.add(topLight);
 
 // Éléments spatiaux supprimés - scène neutre
 
@@ -91,7 +109,7 @@ const projectsData = [
     file: 'Objets/moi.glb',
     description: 'Mon avatar 3D personnalisé.',
     link: null,
-    taille: 0.8,
+    taille: 1.0,
     lumiereMax: 1.0,
     offset: { x: 0, y: 0, z: 0 },
   },
@@ -102,7 +120,7 @@ const projectsData = [
     file: 'Objets/badge.glb',
     description: 'Mon badge d\'identification professionnel.',
     link: null,
-    taille: 0.8,
+    taille: 1.0,
     lumiereMax: 1.0,
     offset: { x: 0.3, y: 0.5, z: 0.2 },
   },
@@ -113,7 +131,7 @@ const projectsData = [
     file: 'Objets/ballon.glb',
     description: 'Mon ballon de basket préféré.',
     link: null,
-    taille: 0.6,
+    taille: 1.0,
     lumiereMax: 1.0,
     offset: { x: -0.4, y: 0.2, z: 0.3 },
   },
@@ -124,7 +142,7 @@ const projectsData = [
     file: 'Objets/chaussures.glb',
     description: 'Mes chaussures préférées.',
     link: null,
-    taille: 0.7,
+    taille: 1.0,
     lumiereMax: 1.0,
     offset: { x: 0.2, y: -0.8, z: 0.1 },
   },
@@ -135,7 +153,7 @@ const projectsData = [
     file: 'Objets/pantalon.glb',
     description: 'Mon pantalon préféré.',
     link: null,
-    taille: 0.9,
+    taille: 1.0,
     lumiereMax: 1.0,
     offset: { x: -0.2, y: -0.3, z: 0.2 },
   },
@@ -420,12 +438,8 @@ async function loadProjects() {
       }
     });
     
-    // Ne pas modifier la position - garder les propriétés originales du GLB
-    // Les objets sont déjà bien positionnés dans Blender
-    // Mais ajuster la taille si nécessaire (pour "moi" qui est trop grand)
-    if (project.taille && project.taille !== 1.0) {
-      asset.scale.multiplyScalar(project.taille);
-    }
+    // Normaliser tous les objets à la même taille pour uniformiser
+    normalizeModel(asset, 1.6);
     anchor.add(asset);
     
     // Positionner le groupe au centre de la scène, mais garder les positions relatives des objets
