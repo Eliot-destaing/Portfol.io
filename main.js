@@ -19,8 +19,39 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-// Fond gris-bleu clair comme dans la photo
-scene.background = new THREE.Color(0xe8eef5);
+// Fond en dégradé (blanc en haut, gris-bleu en bas)
+const gradientShader = {
+  uniforms: {
+    topColor: { value: new THREE.Color(0xffffff) },
+    bottomColor: { value: new THREE.Color(0xe8eef5) },
+    offset: { value: 0 },
+    exponent: { value: 0.6 }
+  },
+  vertexShader: `
+    varying vec3 vWorldPosition;
+    void main() {
+      vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+      vWorldPosition = worldPosition.xyz;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    uniform vec3 topColor;
+    uniform vec3 bottomColor;
+    uniform float offset;
+    uniform float exponent;
+    varying vec3 vWorldPosition;
+    void main() {
+      float h = normalize(vWorldPosition + offset).y;
+      gl_FragColor = vec4(mix(bottomColor, topColor, max(pow(max(h, 0.0), exponent), 0.0)), 1.0);
+    }
+  `
+};
+const gradientMaterial = new THREE.ShaderMaterial(gradientShader);
+const gradientGeometry = new THREE.SphereGeometry(500, 32, 15);
+gradientGeometry.scale(-1, 1, 1);
+const gradientMesh = new THREE.Mesh(gradientGeometry, gradientMaterial);
+scene.add(gradientMesh);
 
 const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 60);
 camera.position.set(0, 1.6, 5);
@@ -389,14 +420,12 @@ async function loadProjects() {
       }
     });
     
-    // Utiliser la taille personnalisée
-    const targetVisualSize = project.taille !== undefined ? project.taille : 1.0;
-    normalizeModel(asset, targetVisualSize);
+    // Ne pas modifier la taille ni la position - garder les propriétés originales du GLB
+    // Les objets sont déjà bien positionnés dans Blender
     anchor.add(asset);
-
-    // Positionner les objets selon leurs offsets pour conserver leurs propriétés dans l'espace
-    const offset = project.offset || { x: 0, y: 0, z: 0 };
-    anchor.position.set(offset.x, offset.y, -4.5 + offset.z);
+    
+    // Positionner le groupe au centre de la scène, mais garder les positions relatives des objets
+    anchor.position.set(0, 0, -4.5);
 
     anchor.userData = {
       project,
